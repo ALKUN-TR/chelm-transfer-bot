@@ -22,7 +22,7 @@ def run_flask():
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
 
-# --- BOT CONFIGURATION & LOGIC ---
+# --- BOT CONFIGURATION & STATES ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 ADMIN_CHAT_ID = os.environ.get("ADMIN_CHAT_ID")
 
@@ -39,76 +39,92 @@ ADMIN_CHAT_ID = os.environ.get("ADMIN_CHAT_ID")
 ) = range(9)
 
 LANG_TEXTS = {
+    'RU': {
+        'welcome': "Приветствуем! 🚖 Сервис трансфера Хелм ↔️ Польша.\nВыберите направление:",
+        'routes': [['🚆 Из Хелма', '🚉 В Хелм'], ['🚘 Другой маршрут']],
+        'address_prompt_standard': "📍 Укажите точный адрес, вокзал или аэропорт назначения/отправления:\n(Например: Аэропорт Шопена, вокзал Западный в Варшаве или ул. Маршалковская 10)",
+        'address_prompt_custom': "📍 Укажите, откуда и куда вам нужно доехать (пункт А и пункт Б):\n(Например: Люблин ↔ Аэропорт Модлин)",
+        'date_prompt': "Выберите дату поездки:",
+        'dates': [['📅 Сегодня', '📅 Завтра'], ['🗓 Другая дата']],
+        'time_prompt': "⏰ Укажите точное время отправления или номер поезда/рейса:\n(Например: 14:30 или поезд №119, прибытие в 16:45)",
+        'passengers_prompt': "Укажите количество пассажиров:",
+        'passengers': [['👤 1 пассажир', '👥 2 пассажира'], ['👥 3 пассажира', '👨‍👩‍👧‍👦 4 пассажира'], ['✏️ Свой вариант']],
+        'passengers_custom_prompt': "Введите количество пассажиров вручную (например: 5 взрослых и ребенок):",
+        'luggage_prompt': "Укажите количество багажа:",
+        'luggage': [['🧳 1 чемодан', '🧳 2 чемодана'], ['🧳 3 чемодана', '🧳 4 чемодана'], ['✏️ Свой вариант']],
+        'luggage_custom_prompt': "Введите описание багажа вручную (например: 2 большие сумки + детская коляска):",
+        'transfer_prompt': "Выберите предпочтительный тип трансфера:",
+        'transfer_types': [['🚘 Индивидуальный (отдельное авто)'], ['👥 Совместная поездка (с попутчиками)'], ['🤷‍♂️ Любой вариант']],
+        'phone_prompt': "📱 Нажмите кнопку ниже, чтобы поделиться номером телефона для связи:",
+        'phone_btn': "📱 Поделиться номером телефона",
+        'success': "Спасибо за заказ! Менеджер свяжется с Вами в максимально короткое время.\n💡 Если у Вас срочный вопрос, Вы можете написать диспетчеру напрямую: @ALKUNTR",
+    },
     'UA': {
-        'welcome': "Вітаємо! Оберіть мову для обслуговування:",
-        'choose_route': "Оберіть маршрут трансферу:",
-        'custom_route_prompt': "Введіть свій маршрут (наприклад: Хелм - Варшава):",
-        'enter_address': "Вкажіть точну адресу відправлення та прибуття:",
-        'enter_date': "Вкажіть дату поїздки (наприклад: 25.10.2026):",
-        'enter_time': "Вкажіть бажаний час виїзду:",
-        'choose_passengers': "Оберіть кількість пасажирів:",
-        'custom_passengers_prompt': "Введіть кількість пасажирів числом:",
-        'choose_luggage': "Оберіть кількість багажу:",
-        'custom_luggage_prompt': "Опишіть ваш багаж (кількість валіз/чемоданів):",
-        'choose_transfer_type': "Оберіть тип трансферу:",
-        'enter_phone': "Будь ласка, поділіться номером телефону для зв'язку:",
-        'btn_phone': "Надіслати номер телефону 📱",
-        'success': "Дякуємо! Вашу заявку прийнято. Менеджер зв'яжеться з вами найближчим часом.\n\nДля термінових питань звертайтесь: @ALKUNTR",
+        'welcome': "Вітаємо! 🚖 Сервіс трансферу Хелм ↔️ Польща.\nОберіть напрямок:",
+        'routes': [['🚆 З Хелма', '🚉 До Хелма'], ['🚘 Інший маршрут']],
+        'address_prompt_standard': "📍 Вкажіть точну адресу, вокзал або аеропорт призначення/відправлення:\n(Наприклад: Аеропорт Шопена, вокзал Західний у Варшаві або вул. Маршалковська 10)",
+        'address_prompt_custom': "📍 Вкажіть, звідки і куди вам нужно доїхати (пункт А та пункт Б):\n(Наприклад: Люблін ↔ Аеропорт Модлін)",
+        'date_prompt': "Оберіть дату поїздки:",
+        'dates': [['📅 Сьогодні', '📅 Завтра'], ['🗓 Інша дата']],
+        'time_prompt': "⏰ Вкажіть точний час відправлення або номер поїзда/рейсу:\n(Наприклад: 14:30 або поїзд №119, прибуття о 16:45)",
+        'passengers_prompt': "Вкажіть кількість пасажирів:",
+        'passengers': [['👤 1 пасажир', '👥 2 пасажири'], ['👥 3 пасажири', '👨‍👩‍👧‍👦 4 пасажири'], ['✏️ Свій варіант']],
+        'passengers_custom_prompt': "Введіть кількість пасажирів вручну (наприклад: 5 дорослих і дитина):",
+        'luggage_prompt': "Вкажіть кількість багажу:",
+        'luggage': [['🧳 1 валіза', '🧳 2 валізи'], ['🧳 3 валізи', '🧳 4 валізи'], ['✏️ Свій варіант']],
+        'luggage_custom_prompt': "Введіть опис багажу вручну (наприклад: 2 великі сумки + дитячий візок):",
+        'transfer_prompt': "Оберіть бажаний тип трансферу:",
+        'transfer_types': [['🚘 Індивідуальний (окреме авто)'], ['👥 Спільна поїздка (з попутниками)'], ['🤷‍♂️ Будь-який варіант']],
+        'phone_prompt': "📱 Натисніть кнопку нижче, щоб поділитися номером телефону для зв'язку:",
+        'phone_btn': "📱 Поділитися номером телефону",
+        'success': "Дякуємо за замовлення! Менеджер зв'яжеться з Вами в найкоротший термін.\n💡 Якщо у Вас термінове питання, Ви можете написати диспетчеру напряму: @ALKUNTR",
     },
     'PL': {
-        'welcome': "Witamy! Wybierz język obsługi:",
-        'choose_route': "Wybierz trasę transferu:",
-        'custom_route_prompt': "Wpisz swoją trasę (np. Chełm - Warszawa):",
-        'enter_address': "Podaj dokładny adres odbioru i docelowy:",
-        'enter_date': "Podaj datę podróży (np. 25.10.2026):",
-        'enter_time': "Podaj preferowaną godzinę wyjazdu:",
-        'choose_passengers': "Wybierz liczbę pasażerów:",
-        'custom_passengers_prompt': "Wpisz liczbę pasażerów:",
-        'choose_luggage': "Wybierz ilość bagażu:",
-        'custom_luggage_prompt': "Opisz swój bagaż (liczba walizek):",
-        'choose_transfer_type': "Wybierz typ transferu:",
-        'enter_phone': "Proszę podać numer telefonu do kontaktu:",
-        'btn_phone': "Udostępnij numer telefonu 📱",
-        'success': "Dziękujemy! Twoje zgłoszenie zostało przyjęte. Menedżer skontaktuje się z Tobą wkrótce.\n\nW pilnych sprawach prosimy o kontakt: @ALKUNTR",
+        'welcome': "Witamy! 🚖 Usługa transferu Chełm ↔️ Polska.\nWybierz kierunek:",
+        'routes': [['🚆 Z Chełma', '🚉 Do Chełma'], ['🚘 Inna trasa']],
+        'address_prompt_standard': "📍 Podaj dokładny adres, dworzec lub lotnisko docelowe/odbioru:\n(Np.: Lotnisko Chopina, Dworzec Zachodni w Warszawie lub ul. Marszałkowska 10)",
+        'address_prompt_custom': "📍 Podaj, skąd i dokąd chcesz jechać (punkt A i punkt B):\n(Np.: Lublin ↔ Lotnisko Modlin)",
+        'date_prompt': "Wybierz datę podróży:",
+        'dates': [['📅 Dzisiaj', '📅 Jutro'], ['🗓 Inna data']],
+        'time_prompt': "⏰ Podaj dokładną godzinę odjazdu lub numer pociągu/lotu:\n(Np.: 14:30 lub pociąg nr 119, przyjazd o 16:45)",
+        'passengers_prompt': "Podaj liczbę pasażerów:",
+        'passengers': [['👤 1 pasażer', '👥 2 pasażerów'], ['👥 3 pasażerów', '👨‍👩‍👧‍👦 4 pasażerów'], ['✏️ Inna opcja']],
+        'passengers_custom_prompt': "Wpisz liczbę pasażerów ręcznie (np.: 5 dorosłych i dziecko):",
+        'luggage_prompt': "Podaj ilość bagażu:",
+        'luggage': [['🧳 1 walizka', '🧳 2 walizki'], ['🧳 3 walizki', '🧳 4 walizki'], ['✏️ Inna opcja']],
+        'luggage_custom_prompt': "Opisz swój bagaż ręcznie (np.: 2 duże torby + wózek dziecięcy):",
+        'transfer_prompt': "Wybierz preferowany typ transferu:",
+        'transfer_types': [['🚘 Indywidualny (prywatne auto)'], ['👥 Wspólny przejazd (z współpasażerami)'], ['🤷‍♂️ Dowolna opcja']],
+        'phone_prompt': "📱 Kliknij poniższy przycisk, aby udostępnić numer telefonu do kontaktu:",
+        'phone_btn': "📱 Udostępnij numer telefonu",
+        'success': "Dziękujemy za zamówienie! Menedżer skontaktuje się z Tobą jak najszybciej.\n💡 W pilnych sprawach możesz napisać bezpośrednio do dyspozytora: @ALKUNTR",
     },
     'EN': {
-        'welcome': "Welcome! Select your language:",
-        'choose_route': "Select your transfer route:",
-        'custom_route_prompt': "Enter your route (e.g., Chełm to Warsaw):",
-        'enter_address': "Provide pickup and drop-off addresses:",
-        'enter_date': "Enter travel date (e.g., 25.10.2026):",
-        'enter_time': "Enter preferred departure time:",
-        'choose_passengers': "Select number of passengers:",
-        'custom_passengers_prompt': "Enter number of passengers:",
-        'choose_luggage': "Select luggage amount:",
-        'custom_luggage_prompt': "Describe your luggage (number of bags):",
-        'choose_transfer_type': "Select transfer type:",
-        'enter_phone': "Please share your phone number for contact:",
-        'btn_phone': "Share Phone Number 📱",
-        'success': "Thank you! Your request has been received. A manager will contact you shortly.\n\nFor urgent inquiries, contact: @ALKUNTR",
-    },
-    'RU': {
-        'welcome': "Добро пожаловать! Выберите язык обслуживания:",
-        'choose_route': "Выберите маршрут трансфера:",
-        'custom_route_prompt': "Введите ваш маршрут (например: Хелм - Варшава):",
-        'enter_address': "Укажите точный адрес отправления и прибытия:",
-        'enter_date': "Укажите дату поездки (например: 25.10.2026):",
-        'enter_time': "Укажите желаемое время выезда:",
-        'choose_passengers': "Выберите количество пассажиров:",
-        'custom_passengers_prompt': "Введите количество пассажиров числом:",
-        'choose_luggage': "Выберите количество багажа:",
-        'custom_luggage_prompt': "Опишите ваш багаж (количество чемоданов):",
-        'choose_transfer_type': "Выберите тип трансфера:",
-        'enter_phone': "Пожалуйста, поделитесь номером телефона для связи:",
-        'btn_phone': "Отправить номер телефона 📱",
-        'success': "Спасибо! Ваша заявка принята. Менеджер свяжется с вами в ближайшее время.\n\nДля срочных вопросов обращайтесь: @ALKUNTR",
+        'welcome': "Welcome! 🚖 Transfer service Chełm ↔️ Poland.\nSelect direction:",
+        'routes': [['🚆 From Chełm', '🚉 To Chełm'], ['🚘 Other route']],
+        'address_prompt_standard': "📍 Specify exact address, station, or airport of pickup/destination:\n(e.g., Chopin Airport, Warsaw West Station, or Marszałkowska 10)",
+        'address_prompt_custom': "📍 Specify where from and where to you need to go (Point A and Point B):\n(e.g., Lublin ↔ Modlin Airport)",
+        'date_prompt': "Select travel date:",
+        'dates': [['📅 Today', '📅 Tomorrow'], ['🗓 Other date']],
+        'time_prompt': "⏰ Specify exact departure time or train/flight number:\n(e.g., 14:30 or Train #119, arrival at 16:45)",
+        'passengers_prompt': "Specify number of passengers:",
+        'passengers': [['👤 1 passenger', '👥 2 passengers'], ['👥 3 passengers', '👨‍👩‍👧‍👦 4 passengers'], ['✏️ Custom option']],
+        'passengers_custom_prompt': "Enter number of passengers manually (e.g., 5 adults and a child):",
+        'luggage_prompt': "Specify luggage amount:",
+        'luggage': [['🧳 1 suitcase', '🧳 2 suitcases'], ['🧳 3 suitcases', '🧳 4 suitcases'], ['✏️ Custom option']],
+        'luggage_custom_prompt': "Describe luggage manually (e.g., 2 large bags + baby stroller):",
+        'transfer_prompt': "Select preferred transfer type:",
+        'transfer_types': [['🚘 Private (individual car)'], ['👥 Shared ride (with fellow passengers)'], ['🤷‍♂️ Any option']],
+        'phone_prompt': "📱 Press the button below to share your contact phone number:",
+        'phone_btn': "📱 Share phone number",
+        'success': "Thank you for your order! Manager will contact you as soon as possible.\n💡 For urgent inquiries, contact dispatch directly: @ALKUNTR",
     }
 }
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_keyboard = [['🇺🇦 Українська', '🇵🇱 Polski'], ['🇬🇧 English', '🇷🇺 Русский']]
     await update.message.reply_text(
-        "Вітаємо / Witamy / Welcome / Добро пожаловать!\nОберіть мову / Wybierz język / Select language / Выберите язык:",
+        "Оберіть мову / Wybierz język / Choose language / Выберите язык:",
         reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True)
     )
     return LANGUAGE
@@ -127,100 +143,107 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['lang'] = lang
     texts = LANG_TEXTS[lang]
 
-    routes = [
-        ['Chełm - Lublin', 'Chełm - Warszawa'],
-        ['Chełm - Kraków', 'Інший / Inny / Other']
-    ]
     await update.message.reply_text(
-        texts['choose_route'],
-        reply_markup=ReplyKeyboardMarkup(routes, one_time_keyboard=True, resize_keyboard=True)
+        texts['welcome'],
+        reply_markup=ReplyKeyboardMarkup(texts['routes'], one_time_keyboard=True, resize_keyboard=True)
     )
     return ROUTE
 
 async def set_route(update: Update, context: ContextTypes.DEFAULT_TYPE):
     route = update.message.text
-    lang = context.user_data.get('lang', 'UA')
+    lang = context.user_data.get('lang', 'RU')
     texts = LANG_TEXTS[lang]
 
-    if 'Інший' in route or 'Inny' in route or 'Other' in route:
-        await update.message.reply_text(texts['custom_route_prompt'], reply_markup=ReplyKeyboardRemove())
-        return ROUTE
-
     context.user_data['route'] = route
-    await update.message.reply_text(texts['enter_address'], reply_markup=ReplyKeyboardRemove())
+
+    # Проверка на «Другой маршрут» на всех 4 языках
+    if any(keyword in route for keyword in ['Інший', 'Inna', 'Other', 'Другой']):
+        context.user_data['is_custom_route'] = True
+        await update.message.reply_text(texts['address_prompt_custom'], reply_markup=ReplyKeyboardRemove())
+    else:
+        context.user_data['is_custom_route'] = False
+        await update.message.reply_text(texts['address_prompt_standard'], reply_markup=ReplyKeyboardRemove())
+
     return ADDRESS
 
 async def set_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['address'] = update.message.text
-    lang = context.user_data.get('lang', 'UA')
+    lang = context.user_data.get('lang', 'RU')
     texts = LANG_TEXTS[lang]
-    await update.message.reply_text(texts['enter_date'])
+
+    await update.message.reply_text(
+        texts['date_prompt'],
+        reply_markup=ReplyKeyboardMarkup(texts['dates'], one_time_keyboard=True, resize_keyboard=True)
+    )
     return DATE
 
 async def set_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['date'] = update.message.text
-    lang = context.user_data.get('lang', 'UA')
+    date_choice = update.message.text
+    lang = context.user_data.get('lang', 'RU')
     texts = LANG_TEXTS[lang]
-    await update.message.reply_text(texts['enter_time'])
+
+    if any(keyword in date_choice for keyword in ['Інша', 'Inna', 'Other', 'Другая']):
+        await update.message.reply_text("Вкажіть дату поїздки (наприклад: 25.10.2026):", reply_markup=ReplyKeyboardRemove())
+        return DATE
+
+    context.user_data['date'] = date_choice
+    await update.message.reply_text(texts['time_prompt'], reply_markup=ReplyKeyboardRemove())
     return TIME
 
 async def set_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['time'] = update.message.text
-    lang = context.user_data.get('lang', 'UA')
+    lang = context.user_data.get('lang', 'RU')
     texts = LANG_TEXTS[lang]
 
-    passengers = [['1', '2', '3', '4'], ['5+', 'Custom']]
     await update.message.reply_text(
-        texts['choose_passengers'],
-        reply_markup=ReplyKeyboardMarkup(passengers, one_time_keyboard=True, resize_keyboard=True)
+        texts['passengers_prompt'],
+        reply_markup=ReplyKeyboardMarkup(texts['passengers'], one_time_keyboard=True, resize_keyboard=True)
     )
     return PASSENGERS
 
 async def set_passengers(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    pass_num = update.message.text
-    lang = context.user_data.get('lang', 'UA')
+    pass_choice = update.message.text
+    lang = context.user_data.get('lang', 'RU')
     texts = LANG_TEXTS[lang]
 
-    if pass_num.lower() == 'custom':
-        await update.message.reply_text(texts['custom_passengers_prompt'], reply_markup=ReplyKeyboardRemove())
+    if '✏️' in pass_choice:
+        await update.message.reply_text(texts['passengers_custom_prompt'], reply_markup=ReplyKeyboardRemove())
         return PASSENGERS
 
-    context.user_data['passengers'] = pass_num
-    luggage_opts = [['1-2', '3-4'], ['5+', 'Custom']]
+    context.user_data['passengers'] = pass_choice
     await update.message.reply_text(
-        texts['choose_luggage'],
-        reply_markup=ReplyKeyboardMarkup(luggage_opts, one_time_keyboard=True, resize_keyboard=True)
+        texts['luggage_prompt'],
+        reply_markup=ReplyKeyboardMarkup(texts['luggage'], one_time_keyboard=True, resize_keyboard=True)
     )
     return LUGGAGE
 
 async def set_luggage(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    lugg = update.message.text
-    lang = context.user_data.get('lang', 'UA')
+    lugg_choice = update.message.text
+    lang = context.user_data.get('lang', 'RU')
     texts = LANG_TEXTS[lang]
 
-    if lugg.lower() == 'custom':
-        await update.message.reply_text(texts['custom_luggage_prompt'], reply_markup=ReplyKeyboardRemove())
+    if '✏️' in lugg_choice:
+        await update.message.reply_text(texts['luggage_custom_prompt'], reply_markup=ReplyKeyboardRemove())
         return LUGGAGE
 
-    context.user_data['luggage'] = lugg
-    transfer_types = [['Standard', 'VIP / Individual'], ['Group / Bus']]
+    context.user_data['luggage'] = lugg_choice
     await update.message.reply_text(
-        texts['choose_transfer_type'],
-        reply_markup=ReplyKeyboardMarkup(transfer_types, one_time_keyboard=True, resize_keyboard=True)
+        texts['transfer_prompt'],
+        reply_markup=ReplyKeyboardMarkup(texts['transfer_types'], one_time_keyboard=True, resize_keyboard=True)
     )
     return TRANSFER_TYPE
 
 async def set_transfer_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['transfer_type'] = update.message.text
-    lang = context.user_data.get('lang', 'UA')
+    lang = context.user_data.get('lang', 'RU')
     texts = LANG_TEXTS[lang]
 
     phone_btn = ReplyKeyboardMarkup(
-        [[KeyboardButton(texts['btn_phone'], request_contact=True)]],
+        [[KeyboardButton(texts['phone_btn'], request_contact=True)]],
         one_time_keyboard=True,
         resize_keyboard=True
     )
-    await update.message.reply_text(texts['enter_phone'], reply_markup=phone_btn)
+    await update.message.reply_text(texts['phone_prompt'], reply_markup=phone_btn)
     return PHONE
 
 async def set_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -228,37 +251,37 @@ async def set_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     phone = contact.phone_number if contact else update.message.text
     context.user_data['phone'] = phone
 
-    lang = context.user_data.get('lang', 'UA')
+    lang = context.user_data.get('lang', 'RU')
     texts = LANG_TEXTS[lang]
 
     user = update.effective_user
-    username = f"@{user.username}" if user.username else "без username"
+    username = f"@{user.username}" if user.username else "нет username"
 
-    admin_msg = (
-        f"🚨 НОВАЯ ЗАЯВКА НА ТРАНСФЕР 🚨\n\n"
+    admin_card = (
+        "📥 НОВАЯ ЗАЯВКА НА ТРАНСФЕР!\n\n"
         f"👤 Клиент: {user.full_name} ({username})\n"
-        f"📞 Телефон: {phone}\n"
         f"🌐 Язык: {lang}\n"
-        f"🗺 Маршрут: {context.user_data.get('route')}\n"
+        f"🛣 Маршрут: {context.user_data.get('route')}\n"
         f"📍 Адрес: {context.user_data.get('address')}\n"
         f"📅 Дата: {context.user_data.get('date')}\n"
-        f"⏰ Время: {context.user_data.get('time')}\n"
+        f"⏰ Время/Рейс: {context.user_data.get('time')}\n"
         f"👥 Пассажиры: {context.user_data.get('passengers')}\n"
         f"🧳 Багаж: {context.user_data.get('luggage')}\n"
-        f"🚘 Тип: {context.user_data.get('transfer_type')}"
+        f"🚘 Тип: {context.user_data.get('transfer_type')}\n"
+        f"📞 Телефон: {phone}"
     )
 
     if ADMIN_CHAT_ID:
         try:
-            await context.bot.send_message(chat_id=int(ADMIN_CHAT_ID), text=admin_msg)
+            await context.bot.send_message(chat_id=int(ADMIN_CHAT_ID), text=admin_card)
         except Exception as e:
-            print(f"Error sending to admin: {e}")
+            print(f"Ошибка отправки администратору: {e}")
 
     await update.message.reply_text(texts['success'], reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Дію скасовано / Cancelled.", reply_markup=ReplyKeyboardRemove())
+    await update.message.reply_text("Отменено / Cancelled.", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
 def main():
