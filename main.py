@@ -65,6 +65,15 @@ LANGUAGES = {
         'share_phone': "📱 Натисніть кнопку нижче, щоб передати номер телефону:",
         'btn_phone': "📱 Поділитися номером телефону",
         'summary_title': "📋 **Перевірте дані вашої заявки:**",
+        'field_transfer_type': "Тип трансферу:",
+        'field_pickup': "Відправлення:",
+        'field_dropoff': "Прибуття:",
+        'field_datetime': "Дата та час:",
+        'field_passengers': "Пасажири:",
+        'field_children': "Діти:",
+        'field_luggage': "Багаж:",
+        'field_details': "Деталі поїздки:",
+        'field_phone': "Телефон:",
         'urgent_contact': f"⚡️ У разі терміновості зв'яжіться з менеджером: {escape_markdown(MANAGER_CONTACT)}",
         'success': "✅ Дякуємо! Вашу заявку прийнято. Менеджер зв'яжеться з вами найближчим часом.",
         'cancelled': "❌ Вашу заявку скасовано.",
@@ -97,6 +106,15 @@ LANGUAGES = {
         'share_phone': "📱 Kliknij przycisk poniżej, aby udostępnić numer:",
         'btn_phone': "📱 Udostępnij numer telefonu",
         'summary_title': "📋 **Sprawdź szczegóły zamówienia:**",
+        'field_transfer_type': "Typ transferu:",
+        'field_pickup': "Miejsce odbioru:",
+        'field_dropoff': "Miejsce dojazdu:",
+        'field_datetime': "Data i godzina:",
+        'field_passengers': "Pasażerowie:",
+        'field_children': "Dzieci:",
+        'field_luggage': "Bagaż:",
+        'field_details': "Szczegóły przejazdu:",
+        'field_phone': "Telefon:",
         'urgent_contact': f"⚡️ W pilnych sprawach skontaktuj się z menedżerem: {escape_markdown(MANAGER_CONTACT)}",
         'success': "✅ Dziękujemy! Zgłoszenie zostało przyjęte. Menedżer skontaktuje się z Tobą.",
         'cancelled': "❌ Twoje zgłoszenie zostało anulowane.",
@@ -129,6 +147,15 @@ LANGUAGES = {
         'share_phone': "📱 Press the button below to share your phone number:",
         'btn_phone': "📱 Share phone number",
         'summary_title': "📋 **Please review your booking:**",
+        'field_transfer_type': "Transfer type:",
+        'field_pickup': "Pick-up:",
+        'field_dropoff': "Drop-off:",
+        'field_datetime': "Date and time:",
+        'field_passengers': "Passengers:",
+        'field_children': "Children:",
+        'field_luggage': "Luggage:",
+        'field_details': "Trip details:",
+        'field_phone': "Phone:",
         'urgent_contact': f"⚡️ In case of urgency, contact the manager: {escape_markdown(MANAGER_CONTACT)}",
         'success': "✅ Thank you! Your booking is received. Manager will contact you shortly.",
         'cancelled': "❌ Your booking has been cancelled.",
@@ -161,6 +188,15 @@ LANGUAGES = {
         'share_phone': "📱 Нажмите кнопку внизу, чтобы передать номер телефона:",
         'btn_phone': "📱 Поделиться номером телефона",
         'summary_title': "📋 **Проверьте данные вашей заявки:**",
+        'field_transfer_type': "Тип трансфера:",
+        'field_pickup': "Отправление:",
+        'field_dropoff': "Прибытие:",
+        'field_datetime': "Дата и время:",
+        'field_passengers': "Пассажиры:",
+        'field_children': "Дети:",
+        'field_luggage': "Багаж:",
+        'field_details': "Детали поездки:",
+        'field_phone': "Телефон:",
         'urgent_contact': f"⚡️ В случае срочности свяжитесь с менеджером: {escape_markdown(MANAGER_CONTACT)}",
         'success': "✅ Спасибо! Ваша заявка принята. Менеджер свяжется с вами в ближайшее время.",
         'cancelled': "❌ Ваша заявка отменена.",
@@ -186,15 +222,15 @@ def build_summary_text(context_data, lang_code):
     txt = LANGUAGES[lang_code]
     summary = (
         f"{txt['summary_title']}\n\n"
-        f"🚘 **Тип трансфера:** {escape_markdown(context_data.get('transfer_type'))}\n"
-        f"📍 **Отправление:** {escape_markdown(context_data.get('pickup'))}\n"
-        f"🏁 **Прибытие:** {escape_markdown(context_data.get('dropoff'))}\n"
-        f"📅 **Дата и время:** {escape_markdown(context_data.get('datetime'))}\n"
-        f"👥 **Пассажиры:** {escape_markdown(context_data.get('passengers'))}\n"
-        f"👶 **Дети:** {escape_markdown(context_data.get('children'))}\n"
-        f"🧳 **Багаж:** {escape_markdown(context_data.get('luggage'))}\n"
-        f"📝 **Детали поездки:** {escape_markdown(context_data.get('details', '-'))}\n"
-        f"📞 **Телефон:** `{escape_markdown(context_data.get('phone'))}`\n\n"
+        f"🚘 **{txt['field_transfer_type']}** {escape_markdown(context_data.get('transfer_type'))}\n"
+        f"📍 **{txt['field_pickup']}** {escape_markdown(context_data.get('pickup'))}\n"
+        f"🏁 **{txt['field_dropoff']}** {escape_markdown(context_data.get('dropoff'))}\n"
+        f"📅 **{txt['field_datetime']}** {escape_markdown(context_data.get('datetime'))}\n"
+        f"👥 **{txt['field_passengers']}** {escape_markdown(context_data.get('passengers'))}\n"
+        f"👶 **{txt['field_children']}** {escape_markdown(context_data.get('children'))}\n"
+        f"🧳 **{txt['field_luggage']}** {escape_markdown(context_data.get('luggage'))}\n"
+        f"📝 **{txt['field_details']}** {escape_markdown(context_data.get('details', '-'))}\n"
+        f"📞 **{txt['field_phone']}** `{escape_markdown(context_data.get('phone'))}`\n\n"
         f"{txt['success']}\n\n"
         f"{txt['urgent_contact']}"
     )
@@ -279,7 +315,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(txt['enter_children_info'], reply_markup=markup)
             return
         elif data == "no_children":
-            context.user_data['children'] = "Нет" if lang == 'ru' else ("Ні" if lang == 'ua' else "No")
+            context.user_data['children'] = "Нет" if lang == 'ru' else ("Ні" if lang == 'ua' else ("Nie" if lang == 'pl' else "No"))
             context.user_data['step'] = 'luggage'
     elif step == 'luggage':
         if data == "custom_luggage":
