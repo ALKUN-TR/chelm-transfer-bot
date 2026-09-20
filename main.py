@@ -27,7 +27,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Инициализация Flask для поддержания веб-сервиса на Render
+# Инициализация Flask
 app = Flask(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -47,8 +47,8 @@ LANGUAGES = {
         'select_luggage': "Оберіть кількість багажу:",
         'luggages': ["1 чемодан", "2 чемодани", "3 чемодани", "4 чемодани", "🧳 Свій варіант"],
         'enter_luggage': "Опишіть ваш багаж у чат:",
-        'enter_pickup': "Введіть точну адресу або место ПОСАДКИ у чат:",
-        'enter_dropoff': "Введіть точну адресу або место ВЫСАДКИ у чат:",
+        'enter_pickup': "Введіть точну адресу або місце ПОСАДКИ у чат:",
+        'enter_dropoff': "Введіть точну адресу або місце ВЫСАДКИ у чат:",
         'share_phone': "📱 Натисніть кнопку нижче, щоб передати номер телефону:",
         'btn_phone': "📱 Поділитися номером телефону",
         'success': "✅ Дякуємо! Вашу заявку прийнято. Менеджер зв'яжеться з вами найближчим часом.",
@@ -75,7 +75,7 @@ LANGUAGES = {
         'luggages': ["1 walizka", "2 walizki", "3 walizki", "4 walizki", "🧳 Inna opcja"],
         'enter_luggage': "Opisz swój bagaż na czacie:",
         'enter_pickup': "Wpisz dokładny adres/miejsce ODBIORU na czacie:",
-        'enter_dropoff': "Wpisz dokładny adres/miejsce DOJAZDУ na czacie:",
+        'enter_dropoff': "Wpisz dokładny adres/miejsce DOJAZDU na czacie:",
         'share_phone': "📱 Kliknij przycisk poniżej, aby udostępnić numer:",
         'btn_phone': "📱 Udostępnij numer telefonu",
         'success': "✅ Dziękujemy! Zgłoszenie zostało przyjęte. Menedżer skontaktuje się z Tobą.",
@@ -158,8 +158,21 @@ async def safe_delete_user_msg(context, chat_id, message_id):
     except Exception:
         pass
 
+async def remove_reply_keyboard_if_any(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        hide_msg = await context.bot.send_message(
+            chat_id=update.effective_chat.id, 
+            text="...", 
+            reply_markup=ReplyKeyboardRemove()
+        )
+        await safe_delete_user_msg(context, update.effective_chat.id, hide_msg.message_id)
+    except Exception:
+        pass
+
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
+    await remove_reply_keyboard_if_any(update, context)
+    
     keyboard = [
         [InlineKeyboardButton("🇺🇦 Українська", callback_data="lang_ua"),
          InlineKeyboardButton("🇵🇱 Polski", callback_data="lang_pl")],
@@ -195,12 +208,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = context.user_data.get('lang', 'ua')
 
     if data == "nav_back":
+        await remove_reply_keyboard_if_any(update, context)
         step = context.user_data.get('step')
         steps_order = ['route', 'date', 'time', 'passengers', 'luggage', 'pickup', 'dropoff', 'phone']
         if step in steps_order:
             idx = steps_order.index(step)
             if idx > 0:
-                context.user_data['step'] = steps_order[idx - 1]
+                prev_step = steps_order[idx - 1]
+                context.user_data['step'] = prev_step
             else:
                 await start_command(update, context)
                 return
@@ -276,7 +291,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await render_step(query, context)
 
-async def render_step(query, context: ContextTypes.DEFAULT_TYPE):
+async def render_step(query_or_dummy, context: ContextTypes.DEFAULT_TYPE):
     lang = context.user_data.get('lang', 'ua')
     txt = LANGUAGES[lang]
     step = context.user_data.get('step', 'route')
@@ -284,12 +299,14 @@ async def render_step(query, context: ContextTypes.DEFAULT_TYPE):
     keyboard = []
     
     if step == 'route':
+        context.user_data['awaiting_text'] = None
         text = txt['welcome']
         for r in txt['routes']:
             keyboard.append([InlineKeyboardButton(r, callback_data=r)])
         keyboard.append(get_nav_buttons(lang, show_back=False))
         
     elif step == 'date':
+        context.user_data['awaiting_text'] = None
         text = txt['select_date']
         keyboard.append([InlineKeyboardButton(txt['dates'][0], callback_data=txt['dates'][0]),
                          InlineKeyboardButton(txt['dates'][1], callback_data=txt['dates'][1])])
@@ -302,6 +319,7 @@ async def render_step(query, context: ContextTypes.DEFAULT_TYPE):
         keyboard.append(get_nav_buttons(lang))
         
     elif step == 'passengers':
+        context.user_data['awaiting_text'] = None
         text = txt['select_passengers']
         p_list = txt['passengers']
         row = [InlineKeyboardButton(p_list[i], callback_data=p_list[i]) for i in range(4)]
@@ -310,6 +328,7 @@ async def render_step(query, context: ContextTypes.DEFAULT_TYPE):
         keyboard.append(get_nav_buttons(lang))
         
     elif step == 'luggage':
+        context.user_data['awaiting_text'] = None
         text = txt['select_luggage']
         l_list = txt['luggages']
         keyboard.append([InlineKeyboardButton(l_list[0], callback_data=l_list[0]),
@@ -330,17 +349,27 @@ async def render_step(query, context: ContextTypes.DEFAULT_TYPE):
         keyboard.append(get_nav_buttons(lang))
         
     elif step == 'phone':
+        context.user_data['awaiting_text'] = None
         text = txt['share_phone']
+        keyboard.append(get_nav_buttons(lang))
+        markup = InlineKeyboardMarkup(keyboard)
+        await query_or_dummy.edit_message_text(text=text, reply_markup=markup)
+        
         reply_markup = ReplyKeyboardMarkup(
             [[KeyboardButton(txt['btn_phone'], request_contact=True)]],
             resize_keyboard=True,
             one_time_keyboard=True
         )
-        await query.message.reply_text(text, reply_markup=reply_markup)
+        chat_id = context.user_data.get('chat_id', query_or_dummy.message.chat_id if hasattr(query_or_dummy, 'message') else query_or_dummy.chat_id)
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="👇",
+            reply_markup=reply_markup
+        )
         return
 
     markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(text=text, reply_markup=markup)
+    await query_or_dummy.edit_message_text(text=text, reply_markup=markup)
 
 async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await safe_delete_user_msg(context, update.effective_chat.id, update.message.message_id)
@@ -348,6 +377,7 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     awaiting = context.user_data.get('awaiting_text')
     card_msg_id = context.user_data.get('card_msg_id')
     user_text = update.message.text
+    context.user_data['chat_id'] = update.effective_chat.id
     
     if not awaiting or not card_msg_id:
         return
@@ -371,21 +401,20 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['dropoff'] = user_text
         context.user_data['step'] = 'phone'
         
-    context.user_data['awaiting_text'] = None
-    
     class DummyQuery:
-        def __init__(self, msg):
-            self.message = msg
+        def __init__(self, chat_id, msg_id):
+            self.chat_id = chat_id
+            self.message_id = msg_id
         async def edit_message_text(self, text, reply_markup=None):
             await context.bot.edit_message_text(
-                chat_id=self.message.chat_id,
-                message_id=self.message.message_id,
+                chat_id=self.chat_id,
+                message_id=self.message_id,
                 text=text,
                 reply_markup=reply_markup
             )
             
-    dummy_msg = type('Msg', (), {'chat_id': update.effective_chat.id, 'message_id': card_msg_id})()
-    await render_step(DummyQuery(dummy_msg), context)
+    dummy = DummyQuery(update.effective_chat.id, card_msg_id)
+    await render_step(dummy, context)
 
 async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await safe_delete_user_msg(context, update.effective_chat.id, update.message.message_id)
@@ -397,7 +426,7 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     txt = LANGUAGES[lang]
 
     hide_kb = await update.message.reply_text(".", reply_markup=ReplyKeyboardRemove())
-    await safe_delete_user_msg(context, update.effective_chat.id, hide_kb.message_id)
+    await safe_delete_user_msg(context, update.effective_chat.id, hide_msg.message_id)
 
     if ADMIN_CHAT_ID:
         user = update.effective_user
