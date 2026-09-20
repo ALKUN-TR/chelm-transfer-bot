@@ -27,7 +27,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Инициализация Flask для поддержания порта на Render
+# Инициализация Flask для поддержания веб-сервиса на Render
 app = Flask(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -40,14 +40,15 @@ LANGUAGES = {
         'select_date': "Оберіть дату поїздки:",
         'dates': ["Сьогодні", "Завтра", "📅 Інша дата"],
         'enter_date': "Будь ласка, напишіть дату поїздки у чат (наприклад, 25.10):",
-        'select_time': "Оберіть або введіть час:",
-        'times': ["08:00", "12:00", "16:00", "20:00", "✏️ Свій час"],
-        'enter_time': "Введіть зручний для вас час у чат:",
+        'enter_time': "Введіть зручний для вас час у чат (наприклад, 14:30):",
         'select_passengers': "Вкажіть кількість пасажирів:",
-        'passengers': ["1", "2", "3", "4+"],
+        'passengers': ["1", "2", "3", "4", "✏️ Свій варіант"],
+        'enter_passengers': "Введіть кількість пасажирів у чат:",
         'select_luggage': "Оберіть кількість багажу:",
-        'luggages': ["Без багажу", "1 валіза", "2 валізи", "🧳 Багато багажу"],
-        'enter_address': "Введіть точну адресу посадки/висадки у чат:",
+        'luggages': ["1 чемодан", "2 чемодани", "3 чемодани", "4 чемодани", "🧳 Свій варіант"],
+        'enter_luggage': "Опишіть ваш багаж у чат:",
+        'enter_pickup': "Введіть точну адресу або место ПОСАДКИ у чат:",
+        'enter_dropoff': "Введіть точну адресу або место ВЫСАДКИ у чат:",
         'share_phone': "📱 Натисніть кнопку нижче, щоб передати номер телефону:",
         'btn_phone': "📱 Поділитися номером телефону",
         'success': "✅ Дякуємо! Вашу заявку прийнято. Менеджер зв'яжеться з вами найближчим часом.",
@@ -66,14 +67,15 @@ LANGUAGES = {
         'select_date': "Wybierz datę przejazdu:",
         'dates': ["Dzisiaj", "Jutro", "📅 Inna data"],
         'enter_date': "Proszę wpisać datę przejazdu na czacie (np. 25.10):",
-        'select_time': "Wybierz lub wpisz godzinę:",
-        'times': ["08:00", "12:00", "16:00", "20:00", "✏️ Inna godzina"],
-        'enter_time': "Wpisz dogodną godzinę na czacie:",
+        'enter_time': "Wpisz dogodną godzinę na czacie (np. 14:30):",
         'select_passengers': "Wybierz liczbę pasażerów:",
-        'passengers': ["1", "2", "3", "4+"],
+        'passengers': ["1", "2", "3", "4", "✏️ Inna opcja"],
+        'enter_passengers': "Wpisz liczbę pasażerów na czacie:",
         'select_luggage': "Wybierz ilość bagażu:",
-        'luggages': ["Bez bagażu", "1 walizka", "2 walizki", "🧳 Dużo bagażu"],
-        'enter_address': "Wpisz dokładny adres odbioru/dojazdu na czacie:",
+        'luggages': ["1 walizka", "2 walizki", "3 walizki", "4 walizki", "🧳 Inna opcja"],
+        'enter_luggage': "Opisz swój bagaż na czacie:",
+        'enter_pickup': "Wpisz dokładny adres/miejsce ODBIORU na czacie:",
+        'enter_dropoff': "Wpisz dokładny adres/miejsce DOJAZDУ na czacie:",
         'share_phone': "📱 Kliknij przycisk poniżej, aby udostępnić numer:",
         'btn_phone': "📱 Udostępnij numer telefonu",
         'success': "✅ Dziękujemy! Zgłoszenie zostało przyjęte. Menedżer skontaktuje się z Tobą.",
@@ -92,14 +94,15 @@ LANGUAGES = {
         'select_date': "Select date of trip:",
         'dates': ["Today", "Tomorrow", "📅 Other date"],
         'enter_date': "Please type the date in chat (e.g., 25.10):",
-        'select_time': "Select or type time:",
-        'times': ["08:00", "12:00", "16:00", "20:00", "✏️ Custom time"],
-        'enter_time': "Type your preferred time in chat:",
+        'enter_time': "Type your preferred time in chat (e.g., 14:30):",
         'select_passengers': "Select number of passengers:",
-        'passengers': ["1", "2", "3", "4+"],
+        'passengers': ["1", "2", "3", "4", "✏️ Custom option"],
+        'enter_passengers': "Type number of passengers in chat:",
         'select_luggage': "Select luggage amount:",
-        'luggages': ["No luggage", "1 suitcase", "2 suitcases", "🧳 Heavy luggage"],
-        'enter_address': "Type exact pick-up/drop-off address in chat:",
+        'luggages': ["1 suitcase", "2 suitcases", "3 suitcases", "4 suitcases", "🧳 Custom option"],
+        'enter_luggage': "Describe your luggage in chat:",
+        'enter_pickup': "Type exact PICK-UP address or location in chat:",
+        'enter_dropoff': "Type exact DROP-OFF address or location in chat:",
         'share_phone': "📱 Press the button below to share your phone number:",
         'btn_phone': "📱 Share phone number",
         'success': "✅ Thank you! Your booking is received. Manager will contact you shortly.",
@@ -118,14 +121,15 @@ LANGUAGES = {
         'select_date': "Выберите дату поездки:",
         'dates': ["Сегодня", "Завтра", "📅 Другая дата"],
         'enter_date': "Пожалуйста, напишите дату поездки в чат (например, 25.10):",
-        'select_time': "Выберите или введите время:",
-        'times': ["08:00", "12:00", "16:00", "20:00", "✏️ Свое время"],
-        'enter_time': "Введите удобное время в чат:",
+        'enter_time': "Введите удобное время в чат (например, 14:30):",
         'select_passengers': "Укажите количество пассажиров:",
-        'passengers': ["1", "2", "3", "4+"],
+        'passengers': ["1", "2", "3", "4", "✏️ Свой вариант"],
+        'enter_passengers': "Введите количество пассажиров в чат:",
         'select_luggage': "Выберите количество багажа:",
-        'luggages': ["Без багажа", "1 чемодан", "2 чемодана", "🧳 Много багажа"],
-        'enter_address': "Введите точный адрес посадки/высадки в чат:",
+        'luggages': ["1 чемодан", "2 чемодана", "3 чемодана", "4 чемодана", "🧳 Свой вариант"],
+        'enter_luggage': "Опишите ваш багаж в чат:",
+        'enter_pickup': "Введите точный адрес или место ПОСАДКИ в чат:",
+        'enter_dropoff': "Введите точный адрес или место ВЫСАДКИ в чат:",
         'share_phone': "📱 Нажмите кнопку внизу, чтобы передать номер телефона:",
         'btn_phone': "📱 Поделиться номером телефона",
         'success': "✅ Спасибо! Ваша заявка принята. Менеджер свяжется с вами в ближайшее время.",
@@ -192,7 +196,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "nav_back":
         step = context.user_data.get('step')
-        steps_order = ['route', 'date', 'time', 'passengers', 'luggage', 'address', 'phone']
+        steps_order = ['route', 'date', 'time', 'passengers', 'luggage', 'pickup', 'dropoff', 'phone']
         if step in steps_order:
             idx = steps_order.index(step)
             if idx > 0:
@@ -217,26 +221,24 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         context.user_data['date'] = data
         context.user_data['step'] = 'time'
-    elif step == 'time':
-        if data == "custom_time":
-            context.user_data['awaiting_text'] = 'time'
+    elif step == 'passengers':
+        if data == "custom_passengers":
+            context.user_data['awaiting_text'] = 'passengers'
             txt = LANGUAGES[lang]
             markup = InlineKeyboardMarkup([get_nav_buttons(lang)])
-            await query.edit_message_text(txt['enter_time'], reply_markup=markup)
+            await query.edit_message_text(txt['enter_passengers'], reply_markup=markup)
             return
-        context.user_data['time'] = data
-        context.user_data['step'] = 'passengers'
-    elif step == 'passengers':
         context.user_data['passengers'] = data
         context.user_data['step'] = 'luggage'
     elif step == 'luggage':
+        if data == "custom_luggage":
+            context.user_data['awaiting_text'] = 'luggage'
+            txt = LANGUAGES[lang]
+            markup = InlineKeyboardMarkup([get_nav_buttons(lang)])
+            await query.edit_message_text(txt['enter_luggage'], reply_markup=markup)
+            return
         context.user_data['luggage'] = data
-        context.user_data['step'] = 'address'
-        context.user_data['awaiting_text'] = 'address'
-        txt = LANGUAGES[lang]
-        markup = InlineKeyboardMarkup([get_nav_buttons(lang)])
-        await query.edit_message_text(txt['enter_address'], reply_markup=markup)
-        return
+        context.user_data['step'] = 'pickup'
     elif data == "ask_cancel":
         txt = LANGUAGES[lang]
         keyboard = [
@@ -295,22 +297,36 @@ async def render_step(query, context: ContextTypes.DEFAULT_TYPE):
         keyboard.append(get_nav_buttons(lang))
         
     elif step == 'time':
-        text = txt['select_time']
-        row = [InlineKeyboardButton(t, callback_data=t) for t in txt['times'][:4]]
-        keyboard.append(row)
-        keyboard.append([InlineKeyboardButton(txt['times'][4], callback_data="custom_time")])
+        text = txt['enter_time']
+        context.user_data['awaiting_text'] = 'time'
         keyboard.append(get_nav_buttons(lang))
         
     elif step == 'passengers':
         text = txt['select_passengers']
-        row = [InlineKeyboardButton(p, callback_data=p) for p in txt['passengers']]
+        p_list = txt['passengers']
+        row = [InlineKeyboardButton(p_list[i], callback_data=p_list[i]) for i in range(4)]
         keyboard.append(row)
+        keyboard.append([InlineKeyboardButton(p_list[4], callback_data="custom_passengers")])
         keyboard.append(get_nav_buttons(lang))
         
     elif step == 'luggage':
         text = txt['select_luggage']
-        for l in txt['luggages']:
-            keyboard.append([InlineKeyboardButton(l, callback_data=l)])
+        l_list = txt['luggages']
+        keyboard.append([InlineKeyboardButton(l_list[0], callback_data=l_list[0]),
+                         InlineKeyboardButton(l_list[1], callback_data=l_list[1])])
+        keyboard.append([InlineKeyboardButton(l_list[2], callback_data=l_list[2]),
+                         InlineKeyboardButton(l_list[3], callback_data=l_list[3])])
+        keyboard.append([InlineKeyboardButton(l_list[4], callback_data="custom_luggage")])
+        keyboard.append(get_nav_buttons(lang))
+        
+    elif step == 'pickup':
+        text = txt['enter_pickup']
+        context.user_data['awaiting_text'] = 'pickup'
+        keyboard.append(get_nav_buttons(lang))
+
+    elif step == 'dropoff':
+        text = txt['enter_dropoff']
+        context.user_data['awaiting_text'] = 'dropoff'
         keyboard.append(get_nav_buttons(lang))
         
     elif step == 'phone':
@@ -342,8 +358,17 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif awaiting == 'time':
         context.user_data['time'] = user_text
         context.user_data['step'] = 'passengers'
-    elif awaiting == 'address':
-        context.user_data['address'] = user_text
+    elif awaiting == 'passengers':
+        context.user_data['passengers'] = user_text
+        context.user_data['step'] = 'luggage'
+    elif awaiting == 'luggage':
+        context.user_data['luggage'] = user_text
+        context.user_data['step'] = 'pickup'
+    elif awaiting == 'pickup':
+        context.user_data['pickup'] = user_text
+        context.user_data['step'] = 'dropoff'
+    elif awaiting == 'dropoff':
+        context.user_data['dropoff'] = user_text
         context.user_data['step'] = 'phone'
         
     context.user_data['awaiting_text'] = None
@@ -385,7 +410,8 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"⏰ **Время:** {context.user_data.get('time')}\n"
             f"👥 **Пассажиры:** {context.user_data.get('passengers')}\n"
             f"🧳 **Багаж:** {context.user_data.get('luggage')}\n"
-            f"📍 **Адрес:** {context.user_data.get('address')}"
+            f"📍 **Место посадки:** {context.user_data.get('pickup')}\n"
+            f"🏁 **Место высадки:** {context.user_data.get('dropoff')}"
         )
         try:
             await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=order_msg, parse_mode='Markdown')
@@ -430,14 +456,12 @@ async def main():
     tg_app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
     tg_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_input))
 
-    # Сброс старых обновлений/вебхуков при старте
     await tg_app.initialize()
     await tg_app.start()
     await tg_app.updater.start_polling(drop_pending_updates=True)
     
     logger.info("Bot successfully started in polling mode!")
 
-    # Держим событийный цикл активным
     try:
         while True:
             await asyncio.sleep(3600)
@@ -446,9 +470,7 @@ async def main():
         await tg_app.stop()
 
 if __name__ == '__main__':
-    # Запускаем Flask на отдельном фоне
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
 
-    # Основной поток передаем под асинхронную работу Telegram-бота
     asyncio.run(main())
