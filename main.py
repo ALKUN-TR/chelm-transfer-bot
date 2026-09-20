@@ -557,6 +557,9 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not awaiting or not card_msg_id:
         return
         
+    # Сбрасываем ожидание текста перед переходом к следующему шагу
+    context.user_data['awaiting_text'] = None
+        
     if awaiting == 'pickup':
         context.user_data['pickup'] = user_text
         context.user_data['step'] = 'dropoff'
