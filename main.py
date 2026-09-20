@@ -27,7 +27,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Инициализация Flask
+# Инициализация Flask для поддержания работоспособности на Render
 app = Flask(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -158,20 +158,8 @@ async def safe_delete_user_msg(context, chat_id, message_id):
     except Exception:
         pass
 
-async def remove_reply_keyboard_if_any(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        hide_msg = await context.bot.send_message(
-            chat_id=update.effective_chat.id, 
-            text="...", 
-            reply_markup=ReplyKeyboardRemove()
-        )
-        await safe_delete_user_msg(context, update.effective_chat.id, hide_msg.message_id)
-    except Exception:
-        pass
-
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
-    await remove_reply_keyboard_if_any(update, context)
     
     keyboard = [
         [InlineKeyboardButton("🇺🇦 Українська", callback_data="lang_ua"),
@@ -208,7 +196,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = context.user_data.get('lang', 'ua')
 
     if data == "nav_back":
-        await remove_reply_keyboard_if_any(update, context)
         step = context.user_data.get('step')
         steps_order = ['route', 'date', 'time', 'passengers', 'luggage', 'pickup', 'dropoff', 'phone']
         if step in steps_order:
@@ -279,9 +266,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             cancel_msg = (
                 f"🚫 **ЗАЯВКА ОТМЕНЕНА КЛИЕНТОМ!**\n"
                 f"👤 Клиент: {user.full_name} (@{user.username or 'нет'})\n"
-                f"🛣 Маршрут: {context.user_data.get('route')}\n"
-                f"📅 Дата: {context.user_data.get('date')}\n"
-                f"📞 Телефон: {context.user_data.get('phone')}"
+                f"🛣 Маршрут: {context.user_data.get('route', 'Не указан')}\n"
+                f"📅 Дата: {context.user_data.get('date', 'Не указана')}\n"
+                f"📞 Телефон: {context.user_data.get('phone', 'Не указан')}"
             )
             try:
                 await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=cancel_msg, parse_mode='Markdown')
@@ -363,7 +350,7 @@ async def render_step(query_or_dummy, context: ContextTypes.DEFAULT_TYPE):
         chat_id = context.user_data.get('chat_id', query_or_dummy.message.chat_id if hasattr(query_or_dummy, 'message') else query_or_dummy.chat_id)
         await context.bot.send_message(
             chat_id=chat_id,
-            text="👇",
+            text=txt['share_phone'],
             reply_markup=reply_markup
         )
         return
@@ -420,13 +407,10 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await safe_delete_user_msg(context, update.effective_chat.id, update.message.message_id)
     
     contact = update.message.contact
-    phone = contact.phone_number
+    phone = contact.phone_number if contact else update.message.text
     context.user_data['phone'] = phone
     lang = context.user_data.get('lang', 'ua')
     txt = LANGUAGES[lang]
-
-    hide_kb = await update.message.reply_text(".", reply_markup=ReplyKeyboardRemove())
-    await safe_delete_user_msg(context, update.effective_chat.id, hide_msg.message_id)
 
     if ADMIN_CHAT_ID:
         user = update.effective_user
@@ -434,13 +418,13 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"📥 **НОВАЯ ЗАЯВКА НА ТРАНСФЕР!**\n\n"
             f"👤 **Пассажир:** {user.full_name} (@{user.username or 'нет'})\n"
             f"📞 **Телефон:** `{phone}`\n"
-            f"🛣 **Маршрут:** {context.user_data.get('route')}\n"
-            f"📅 **Дата:** {context.user_data.get('date')}\n"
-            f"⏰ **Время:** {context.user_data.get('time')}\n"
-            f"👥 **Пассажиры:** {context.user_data.get('passengers')}\n"
-            f"🧳 **Багаж:** {context.user_data.get('luggage')}\n"
-            f"📍 **Место посадки:** {context.user_data.get('pickup')}\n"
-            f"🏁 **Место высадки:** {context.user_data.get('dropoff')}"
+            f"🛣 **Маршрут:** {context.user_data.get('route', 'Не указан')}\n"
+            f"📅 **Дата:** {context.user_data.get('date', 'Не указана')}\n"
+            f"⏰ **Время:** {context.user_data.get('time', 'Не указано')}\n"
+            f"👥 **Пассажиры:** {context.user_data.get('passengers', 'Не указано')}\n"
+            f"🧳 **Багаж:** {context.user_data.get('luggage', 'Не указан')}\n"
+            f"📍 **Место посадки:** {context.user_data.get('pickup', 'Не указано')}\n"
+            f"🏁 **Место высадки:** {context.user_data.get('dropoff', 'Не указано')}"
         )
         try:
             await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=order_msg, parse_mode='Markdown')
@@ -455,12 +439,21 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     markup = InlineKeyboardMarkup(keyboard)
     
     if card_msg_id:
-        await context.bot.edit_message_text(
-            chat_id=update.effective_chat.id,
-            message_id=card_msg_id,
-            text=txt['success'],
-            reply_markup=markup
-        )
+        try:
+            await context.bot.edit_message_text(
+                chat_id=update.effective_chat.id,
+                message_id=card_msg_id,
+                text=txt['success'],
+                reply_markup=markup
+            )
+        except Exception as e:
+            logger.error(f"Error updating card message: {e}")
+            
+    # Чистое удаление нижней Reply-клавиатуры вместе с отправкой подтверждения
+    await update.message.reply_text(
+        txt['success'], 
+        reply_markup=ReplyKeyboardRemove()
+    )
 
 # Роут веб-сервера
 @app.route('/')
