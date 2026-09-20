@@ -2,7 +2,7 @@ import os
 import logging
 import asyncio
 import threading
-from flask import Flask, request
+from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
@@ -10,15 +10,12 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Инициализация Flask
+# Flask для поддержки Render Web Service (порты)
 app = Flask(__name__)
 
-# Конфигурация из переменных окружения
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-# Мультиязычные тексты
 LANGUAGES = {
     'ua': {
         'welcome': "Вітаємо! Оберіть напрямок поїздки:",
@@ -125,10 +122,6 @@ LANGUAGES = {
         'no_keep': "Нет, оставить"
     }
 }
-
-# Инициализация Telegram приложения
-tg_app = Application.builder().token(BOT_TOKEN).build()
-loop = asyncio.new_event_loop()
 
 def get_nav_buttons(lang_code, show_back=True):
     txt = LANGUAGES[lang_code]
@@ -391,36 +384,28 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=markup
         )
 
-# Регистрация обработчиков
-tg_app.add_handler(CommandHandler("start", start_command))
-tg_app.add_handler(CallbackQueryHandler(handle_callback))
-tg_app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
-tg_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_input))
-
-# Маршруты Flask
-@app.route('/', methods=['GET'])
+# Роут для поддержания активности на Render
+@app.route('/')
 def index():
-    return "Chelm Transfer Bot is Running", 200
+    return "Bot is alive!", 200
 
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    if request.method == "POST":
-        update = Update.de_json(request.get_json(force=True), tg_app.bot)
-        asyncio.run_coroutine_threadsafe(tg_app.process_update(update), loop)
-        return "ok", 200
+def run_bot_thread():
+    """Запускает бота в отдельном потоке со своим event loop"""
+    asyncio.set_event_loop(asyncio.new_event_loop())
+    tg_app = Application.builder().token(BOT_TOKEN).build()
 
-def run_bot():
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(tg_app.initialize())
-    loop.run_until_complete(tg_app.start())
-    if WEBHOOK_URL:
-        url = f"{WEBHOOK_URL.rstrip('/')}/webhook"
-        loop.run_until_complete(tg_app.bot.set_webhook(url=url))
-    loop.run_forever()
+    tg_app.add_handler(CommandHandler("start", start_command))
+    tg_app.add_handler(CallbackQueryHandler(handle_callback))
+    tg_app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
+    tg_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_input))
 
-# Запуск фонового потока для бота
-threading.Thread(target=run_bot, daemon=True).start()
+    tg_app.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':
+    # Запуск фонового потока бота
+    bot_thread = threading.Thread(target=run_bot_thread, daemon=True)
+    bot_thread.start()
+
+    # Запуск Flask на порту Render
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
