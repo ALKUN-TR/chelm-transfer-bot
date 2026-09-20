@@ -1,315 +1,439 @@
 import os
-import threading
-from flask import Flask
-from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    ConversationHandler,
-    ContextTypes,
-    filters,
-)
+import logging
+from flask import Flask, request
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-# --- FLASK WEB SERVER FOR RENDER HEALTH CHECKS ---
+# Настройка логов
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Инициализация Flask
 app = Flask(__name__)
 
-@app.route('/')
-def health_check():
-    return "OK", 200
+# Конфигурация из переменных окружения
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID")  # Ваш Telegram ID
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")      # Например: https://chelm-transfer-bot.onrender.com
 
-def run_flask():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
-
-# --- BOT CONFIGURATION & STATES ---
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-ADMIN_CHAT_ID = os.environ.get("ADMIN_CHAT_ID")
-
-(
-    LANGUAGE,
-    ROUTE,
-    ADDRESS,
-    DATE,
-    TIME,
-    PASSENGERS,
-    LUGGAGE,
-    TRANSFER_TYPE,
-    PHONE,
-) = range(9)
-
-LANG_TEXTS = {
-    'RU': {
-        'welcome': "Приветствуем! 🚖 Сервис трансфера Хелм ↔️ Польша.\nВыберите направление:",
-        'routes': [['🚆 Из Хелма', '🚉 В Хелм'], ['🚘 Другой маршрут']],
-        'address_prompt_standard': "📍 Укажите точный адрес, вокзал или аэропорт назначения/отправления:\n(Например: Аэропорт Шопена, вокзал Западный в Варшаве или ул. Маршалковская 10)",
-        'address_prompt_custom': "📍 Укажите, откуда и куда вам нужно доехать (пункт А и пункт Б):\n(Например: Люблин ↔ Аэропорт Модлин)",
-        'date_prompt': "Выберите дату поездки:",
-        'dates': [['📅 Сегодня', '📅 Завтра'], ['🗓 Другая дата']],
-        'time_prompt': "⏰ Укажите точное время отправления или номер поезда/рейса:\n(Например: 14:30 или поезд №119, прибытие в 16:45)",
-        'passengers_prompt': "Укажите количество пассажиров:",
-        'passengers': [['👤 1 пассажир', '👥 2 пассажира'], ['👥 3 пассажира', '👨‍👩‍👧‍👦 4 пассажира'], ['✏️ Свой вариант']],
-        'passengers_custom_prompt': "Введите количество пассажиров вручную (например: 5 взрослых и ребенок):",
-        'luggage_prompt': "Укажите количество багажа:",
-        'luggage': [['🧳 1 чемодан', '🧳 2 чемодана'], ['🧳 3 чемодана', '🧳 4 чемодана'], ['✏️ Свой вариант']],
-        'luggage_custom_prompt': "Введите описание багажа вручную (например: 2 большие сумки + детская коляска):",
-        'transfer_prompt': "Выберите предпочтительный тип трансфера:",
-        'transfer_types': [['🚘 Индивидуальный (отдельное авто)'], ['👥 Совместная поездка (с попутчиками)'], ['🤷‍♂️ Любой вариант']],
-        'phone_prompt': "📱 Нажмите кнопку ниже, чтобы поделиться номером телефона для связи:",
-        'phone_btn': "📱 Поделиться номером телефона",
-        'success': "Спасибо за заказ! Менеджер свяжется с Вами в максимально короткое время.\n💡 Если у Вас срочный вопрос, Вы можете написать диспетчеру напрямую: @ALKUNTR",
+# Мультиязычные тексты и элементы UI
+LANGUAGES = {
+    'ua': {
+        'welcome': "Вітаємо! Оберіть напрямок поїздки:",
+        'routes': ["Хелм ➔ Польща", "Польща ➔ Хелм", "🚘 Інший маршрут"],
+        'select_date': "Оберіть дату поїздки:",
+        'dates': ["Сьогодні", "Завтра", "📅 Інша дата"],
+        'enter_date': "Будь ласка, напишіть дату поїздки у чат (наприклад, 25.10):",
+        'select_time': "Оберіть або введіть час:",
+        'times': ["08:00", "12:00", "16:00", "20:00", "✏️ Свій час"],
+        'enter_time': "Введіть зручний для вас час у чат:",
+        'select_passengers': "Вкажіть кількість пасажирів:",
+        'passengers': ["1", "2", "3", "4+"],
+        'select_luggage': "Оберіть кількість багажу:",
+        'luggages': ["Без багажу", "1 валіза", "2 валізи", "🧳 Багато багажу"],
+        'enter_address': "Введіть точну адресу посадки/висадки у чат:",
+        'share_phone': "📱 Натисніть синю кнопку внизу, щоб передати номер телефону:",
+        'btn_phone': "📱 Поділитися номером телефону",
+        'success': "✅ Дякуємо! Вашу заявку прийнято. Менеджер зв'яжеться з вами найближчим часом.",
+        'cancelled': "❌ Вашу заявку скасовано.",
+        'btn_back': "⬅️ Назад",
+        'btn_restart': "🔄 Начати спочатку",
+        'btn_new_order': "➕ Оформити нову заявку",
+        'btn_cancel_order': "❌ Скасувати заявку",
+        'confirm_cancel': "Ви впевнені, що хочете скасувати цю заявку?",
+        'yes_cancel': "Так, скасувати",
+        'no_keep': "Ні, залишити"
     },
-    'UA': {
-        'welcome': "Вітаємо! 🚖 Сервіс трансферу Хелм ↔️ Польща.\nОберіть напрямок:",
-        'routes': [['🚆 З Хелма', '🚉 До Хелма'], ['🚘 Інший маршрут']],
-        'address_prompt_standard': "📍 Вкажіть точну адресу, вокзал або аеропорт призначення/відправлення:\n(Наприклад: Аеропорт Шопена, вокзал Західний у Варшаві або вул. Маршалковська 10)",
-        'address_prompt_custom': "📍 Вкажіть, звідки і куди вам нужно доїхати (пункт А та пункт Б):\n(Наприклад: Люблін ↔ Аеропорт Модлін)",
-        'date_prompt': "Оберіть дату поїздки:",
-        'dates': [['📅 Сьогодні', '📅 Завтра'], ['🗓 Інша дата']],
-        'time_prompt': "⏰ Вкажіть точний час відправлення або номер поїзда/рейсу:\n(Наприклад: 14:30 або поїзд №119, прибуття о 16:45)",
-        'passengers_prompt': "Вкажіть кількість пасажирів:",
-        'passengers': [['👤 1 пасажир', '👥 2 пасажири'], ['👥 3 пасажири', '👨‍👩‍👧‍👦 4 пасажири'], ['✏️ Свій варіант']],
-        'passengers_custom_prompt': "Введіть кількість пасажирів вручну (наприклад: 5 дорослих і дитина):",
-        'luggage_prompt': "Вкажіть кількість багажу:",
-        'luggage': [['🧳 1 валіза', '🧳 2 валізи'], ['🧳 3 валізи', '🧳 4 валізи'], ['✏️ Свій варіант']],
-        'luggage_custom_prompt': "Введіть опис багажу вручну (наприклад: 2 великі сумки + дитячий візок):",
-        'transfer_prompt': "Оберіть бажаний тип трансферу:",
-        'transfer_types': [['🚘 Індивідуальний (окреме авто)'], ['👥 Спільна поїздка (з попутниками)'], ['🤷‍♂️ Будь-який варіант']],
-        'phone_prompt': "📱 Натисніть кнопку нижче, щоб поділитися номером телефону для зв'язку:",
-        'phone_btn': "📱 Поділитися номером телефону",
-        'success': "Дякуємо за замовлення! Менеджер зв'яжеться з Вами в найкоротший термін.\n💡 Якщо у Вас термінове питання, Ви можете написати диспетчеру напряму: @ALKUNTR",
+    'pl': {
+        'welcome': "Witamy! Wybierz kierunek jazdy:",
+        'routes': ["Chełm ➔ Polska", "Polska ➔ Chełm", "🚘 Inna trasa"],
+        'select_date': "Wybierz datę przejazdu:",
+        'dates': ["Dzisiaj", "Jutro", "📅 Inna data"],
+        'enter_date': "Proszę wpisać datę przejazdu na czacie (np. 25.10):",
+        'select_time': "Wybierz lub wpisz godzinę:",
+        'times': ["08:00", "12:00", "16:00", "20:00", "✏️ Inna godzina"],
+        'enter_time': "Wpisz dogodną godzinę na czacie:",
+        'select_passengers': "Wybierz liczbę pasażerów:",
+        'passengers': ["1", "2", "3", "4+"],
+        'select_luggage': "Wybierz ilość bagażu:",
+        'luggages': ["Bez bagażu", "1 walizka", "2 walizki", "🧳 Dużo bagażu"],
+        'enter_address': "Wpisz dokładny adres odbioru/dojazdu na czacie:",
+        'share_phone': "📱 Kliknij niebieski przycisk na dole, aby udostępnić numer:",
+        'btn_phone': "📱 Udostępnij numer telefonu",
+        'success': "✅ Dziękujemy! Zgłoszenie zostało przyjęte. Menedżer skontaktuje się z Tobą.",
+        'cancelled': "❌ Twoje zgłoszenie zostało anulowane.",
+        'btn_back': "⬅️ Wstecz",
+        'btn_restart': "🔄 Zacznij od nowa",
+        'btn_new_order': "➕ Nowe zamówienie",
+        'btn_cancel_order': "❌ Anuluj zamówienie",
+        'confirm_cancel': "Czy na pewno chcesz anulować to zamówienie?",
+        'yes_cancel': "Tak, anuluj",
+        'no_keep': "Nie, zostaw"
     },
-    'PL': {
-        'welcome': "Witamy! 🚖 Usługa transferu Chełm ↔️ Polska.\nWybierz kierunek:",
-        'routes': [['🚆 Z Chełma', '🚉 Do Chełma'], ['🚘 Inna trasa']],
-        'address_prompt_standard': "📍 Podaj dokładny adres, dworzec lub lotnisko docelowe/odbioru:\n(Np.: Lotnisko Chopina, Dworzec Zachodni w Warszawie lub ul. Marszałkowska 10)",
-        'address_prompt_custom': "📍 Podaj, skąd i dokąd chcesz jechać (punkt A i punkt B):\n(Np.: Lublin ↔ Lotnisko Modlin)",
-        'date_prompt': "Wybierz datę podróży:",
-        'dates': [['📅 Dzisiaj', '📅 Jutro'], ['🗓 Inna data']],
-        'time_prompt': "⏰ Podaj dokładną godzinę odjazdu lub numer pociągu/lotu:\n(Np.: 14:30 lub pociąg nr 119, przyjazd o 16:45)",
-        'passengers_prompt': "Podaj liczbę pasażerów:",
-        'passengers': [['👤 1 pasażer', '👥 2 pasażerów'], ['👥 3 pasażerów', '👨‍👩‍👧‍👦 4 pasażerów'], ['✏️ Inna opcja']],
-        'passengers_custom_prompt': "Wpisz liczbę pasażerów ręcznie (np.: 5 dorosłych i dziecko):",
-        'luggage_prompt': "Podaj ilość bagażu:",
-        'luggage': [['🧳 1 walizka', '🧳 2 walizki'], ['🧳 3 walizki', '🧳 4 walizki'], ['✏️ Inna opcja']],
-        'luggage_custom_prompt': "Opisz swój bagaż ręcznie (np.: 2 duże torby + wózek dziecięcy):",
-        'transfer_prompt': "Wybierz preferowany typ transferu:",
-        'transfer_types': [['🚘 Indywidualny (prywatne auto)'], ['👥 Wspólny przejazd (z współpasażerami)'], ['🤷‍♂️ Dowolna opcja']],
-        'phone_prompt': "📱 Kliknij poniższy przycisk, aby udostępnić numer telefonu do kontaktu:",
-        'phone_btn': "📱 Udostępnij numer telefonu",
-        'success': "Dziękujemy za zamówienie! Menedżer skontaktuje się z Tobą jak najszybciej.\n💡 W pilnych sprawach możesz napisać bezpośrednio do dyspozytora: @ALKUNTR",
+    'en': {
+        'welcome': "Welcome! Select your route:",
+        'routes': ["Chełm ➔ Poland", "Poland ➔ Chełm", "🚘 Custom route"],
+        'select_date': "Select date of trip:",
+        'dates': ["Today", "Tomorrow", "📅 Other date"],
+        'enter_date': "Please type the date in chat (e.g., 25.10):",
+        'select_time': "Select or type time:",
+        'times': ["08:00", "12:00", "16:00", "20:00", "✏️ Custom time"],
+        'enter_time': "Type your preferred time in chat:",
+        'select_passengers': "Select number of passengers:",
+        'passengers': ["1", "2", "3", "4+"],
+        'select_luggage': "Select luggage amount:",
+        'luggages': ["No luggage", "1 suitcase", "2 suitcases", "🧳 Heavy luggage"],
+        'enter_address': "Type exact pick-up/drop-off address in chat:",
+        'share_phone': "📱 Press the blue button at the bottom to share your phone number:",
+        'btn_phone': "📱 Share phone number",
+        'success': "✅ Thank you! Your booking is received. Manager will contact you shortly.",
+        'cancelled': "❌ Your booking has been cancelled.",
+        'btn_back': "⬅️ Back",
+        'btn_restart': "🔄 Start over",
+        'btn_new_order': "➕ New booking",
+        'btn_cancel_order': "❌ Cancel booking",
+        'confirm_cancel': "Are you sure you want to cancel this booking?",
+        'yes_cancel': "Yes, cancel",
+        'no_keep': "No, keep"
     },
-    'EN': {
-        'welcome': "Welcome! 🚖 Transfer service Chełm ↔️ Poland.\nSelect direction:",
-        'routes': [['🚆 From Chełm', '🚉 To Chełm'], ['🚘 Other route']],
-        'address_prompt_standard': "📍 Specify exact address, station, or airport of pickup/destination:\n(e.g., Chopin Airport, Warsaw West Station, or Marszałkowska 10)",
-        'address_prompt_custom': "📍 Specify where from and where to you need to go (Point A and Point B):\n(e.g., Lublin ↔ Modlin Airport)",
-        'date_prompt': "Select travel date:",
-        'dates': [['📅 Today', '📅 Tomorrow'], ['🗓 Other date']],
-        'time_prompt': "⏰ Specify exact departure time or train/flight number:\n(e.g., 14:30 or Train #119, arrival at 16:45)",
-        'passengers_prompt': "Specify number of passengers:",
-        'passengers': [['👤 1 passenger', '👥 2 passengers'], ['👥 3 passengers', '👨‍👩‍👧‍👦 4 passengers'], ['✏️ Custom option']],
-        'passengers_custom_prompt': "Enter number of passengers manually (e.g., 5 adults and a child):",
-        'luggage_prompt': "Specify luggage amount:",
-        'luggage': [['🧳 1 suitcase', '🧳 2 suitcases'], ['🧳 3 suitcases', '🧳 4 suitcases'], ['✏️ Custom option']],
-        'luggage_custom_prompt': "Describe luggage manually (e.g., 2 large bags + baby stroller):",
-        'transfer_prompt': "Select preferred transfer type:",
-        'transfer_types': [['🚘 Private (individual car)'], ['👥 Shared ride (with fellow passengers)'], ['🤷‍♂️ Any option']],
-        'phone_prompt': "📱 Press the button below to share your contact phone number:",
-        'phone_btn': "📱 Share phone number",
-        'success': "Thank you for your order! Manager will contact you as soon as possible.\n💡 For urgent inquiries, contact dispatch directly: @ALKUNTR",
+    'ru': {
+        'welcome': "Добро пожаловать! Выберите направление поездки:",
+        'routes': ["Хелм ➔ Польша", "Польша ➔ Хелм", "🚘 Другой маршрут"],
+        'select_date': "Выберите дату поездки:",
+        'dates': ["Сегодня", "Завтра", "📅 Другая дата"],
+        'enter_date': "Пожалуйста, напишите дату поездки в чат (например, 25.10):",
+        'select_time': "Выберите или введите время:",
+        'times': ["08:00", "12:00", "16:00", "20:00", "✏️ Свое время"],
+        'enter_time': "Введите удобное время в чат:",
+        'select_passengers': "Укажите количество пассажиров:",
+        'passengers': ["1", "2", "3", "4+"],
+        'select_luggage': "Выберите количество багажа:",
+        'luggages': ["Без багажа", "1 чемодан", "2 чемодана", "🧳 Много багажа"],
+        'enter_address': "Введите точный адрес посадки/высадки в чат:",
+        'share_phone': "📱 Нажмите синюю кнопку внизу, чтобы передать номер телефона:",
+        'btn_phone': "📱 Поделиться номером телефона",
+        'success': "✅ Спасибо! Ваша заявка принята. Менеджер свяжется с вами в ближайшее время.",
+        'cancelled': "❌ Ваша заявка отменена.",
+        'btn_back': "⬅️ Назад",
+        'btn_restart': "🔄 Начать сначала",
+        'btn_new_order': "➕ Оформить новую заявку",
+        'btn_cancel_order': "❌ Отменить заявку",
+        'confirm_cancel': "Вы уверены, что хотите отменить заявку?",
+        'yes_cancel': "Да, отменить",
+        'no_keep': "Нет, оставить"
     }
 }
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    reply_keyboard = [['🇺🇦 Українська', '🇵🇱 Polski'], ['🇬🇧 English', '🇷🇺 Русский']]
-    await update.message.reply_text(
-        "Оберіть мову / Wybierz język / Choose language / Выберите язык:",
-        reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True)
-    )
-    return LANGUAGE
+# Инициализация Telegram приложения
+tg_app = Application.builder().token(BOT_TOKEN).build()
 
-async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
-    if 'Українська' in text:
-        lang = 'UA'
-    elif 'Polski' in text:
-        lang = 'PL'
-    elif 'English' in text:
-        lang = 'EN'
-    else:
-        lang = 'RU'
+# --- Вспомогательные функции ---
+
+def get_nav_buttons(lang_code, show_back=True):
+    txt = LANGUAGES[lang_code]
+    row = []
+    if show_back:
+        row.append(InlineKeyboardButton(txt['btn_back'], callback_data="nav_back"))
+    row.append(InlineKeyboardButton(txt['btn_restart'], callback_data="nav_restart"))
+    return row
+
+async def safe_delete_user_msg(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int):
+    try:
+        await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+    except Exception:
+        pass
+
+# --- Обработчики команд и Inline-кнопок ---
+
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.clear()
     
-    context.user_data['lang'] = lang
-    texts = LANG_TEXTS[lang]
-
-    await update.message.reply_text(
-        texts['welcome'],
-        reply_markup=ReplyKeyboardMarkup(texts['routes'], one_time_keyboard=True, resize_keyboard=True)
-    )
-    return ROUTE
-
-async def set_route(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    route = update.message.text
-    lang = context.user_data.get('lang', 'RU')
-    texts = LANG_TEXTS[lang]
-
-    context.user_data['route'] = route
-
-    # Проверка на «Другой маршрут» на всех 4 языках
-    if any(keyword in route for keyword in ['Інший', 'Inna', 'Other', 'Другой']):
-        context.user_data['is_custom_route'] = True
-        await update.message.reply_text(texts['address_prompt_custom'], reply_markup=ReplyKeyboardRemove())
+    keyboard = [
+        [InlineKeyboardButton("🇺🇦 Українська", callback_data="lang_ua"),
+         InlineKeyboardButton("🇵🇱 Polski", callback_data="lang_pl")],
+        [InlineKeyboardButton("🇬🇧 English", callback_data="lang_en"),
+         InlineKeyboardButton("🇷🇺 Русский", callback_data="lang_ru")]
+    ]
+    markup = InlineKeyboardMarkup(keyboard)
+    
+    text = " Please select your language / Оберіть мову:"
+    
+    if update.callback_query:
+        await update.callback_query.answer()
+        await update.callback_query.edit_message_text(text=text, reply_markup=markup)
     else:
-        context.user_data['is_custom_route'] = False
-        await update.message.reply_text(texts['address_prompt_standard'], reply_markup=ReplyKeyboardRemove())
+        msg = await update.message.reply_text(text=text, reply_markup=markup)
+        context.user_data['card_msg_id'] = msg.message_id
 
-    return ADDRESS
+async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    
+    # Навигация "Начать сначала"
+    if data == "nav_restart":
+        await start_command(update, context)
+        return
 
-async def set_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['address'] = update.message.text
-    lang = context.user_data.get('lang', 'RU')
-    texts = LANG_TEXTS[lang]
+    # Выбор языка
+    if data.startswith("lang_"):
+        lang = data.split("_")[1]
+        context.user_data['lang'] = lang
+        context.user_data['step'] = 'route'
+        await render_step(query, context)
+        return
 
-    await update.message.reply_text(
-        texts['date_prompt'],
-        reply_markup=ReplyKeyboardMarkup(texts['dates'], one_time_keyboard=True, resize_keyboard=True)
-    )
-    return DATE
+    lang = context.user_data.get('lang', 'ua')
 
-async def set_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    date_choice = update.message.text
-    lang = context.user_data.get('lang', 'RU')
-    texts = LANG_TEXTS[lang]
+    # Навигация "Назад"
+    if data == "nav_back":
+        step = context.user_data.get('step')
+        steps_order = ['route', 'date', 'time', 'passengers', 'luggage', 'address', 'phone']
+        if step in steps_order:
+            idx = steps_order.index(step)
+            if idx > 0:
+                context.user_data['step'] = steps_order[idx - 1]
+            else:
+                await start_command(update, context)
+                return
+        await render_step(query, context)
+        return
 
-    if any(keyword in date_choice for keyword in ['Інша', 'Inna', 'Other', 'Другая']):
-        await update.message.reply_text("Вкажіть дату поїздки (наприклад: 25.10.2026):", reply_markup=ReplyKeyboardRemove())
-        return DATE
+    # Обработка выбора шагов
+    step = context.user_data.get('step')
+    
+    if step == 'route':
+        context.user_data['route'] = data
+        context.user_data['step'] = 'date'
+    elif step == 'date':
+        if data == "custom_date":
+            context.user_data['awaiting_text'] = 'date'
+            txt = LANGUAGES[lang]
+            markup = InlineKeyboardMarkup([get_nav_buttons(lang)])
+            await query.edit_message_text(txt['enter_date'], reply_markup=markup)
+            return
+        context.user_data['date'] = data
+        context.user_data['step'] = 'time'
+    elif step == 'time':
+        if data == "custom_time":
+            context.user_data['awaiting_text'] = 'time'
+            txt = LANGUAGES[lang]
+            markup = InlineKeyboardMarkup([get_nav_buttons(lang)])
+            await query.edit_message_text(txt['enter_time'], reply_markup=markup)
+            return
+        context.user_data['time'] = data
+        context.user_data['step'] = 'passengers'
+    elif step == 'passengers':
+        context.user_data['passengers'] = data
+        context.user_data['step'] = 'luggage'
+    elif step == 'luggage':
+        context.user_data['luggage'] = data
+        context.user_data['step'] = 'address'
+        context.user_data['awaiting_text'] = 'address'
+        txt = LANGUAGES[lang]
+        markup = InlineKeyboardMarkup([get_nav_buttons(lang)])
+        await query.edit_message_text(txt['enter_address'], reply_markup=markup)
+        return
+    elif data == "ask_cancel":
+        txt = LANGUAGES[lang]
+        keyboard = [
+            [InlineKeyboardButton(txt['yes_cancel'], callback_data="confirm_cancel")],
+            [InlineKeyboardButton(txt['no_keep'], callback_data="keep_order")]
+        ]
+        await query.edit_message_text(txt['confirm_cancel'], reply_markup=InlineKeyboardMarkup(keyboard))
+        return
+    elif data == "keep_order":
+        txt = LANGUAGES[lang]
+        keyboard = [
+            [InlineKeyboardButton(txt['btn_new_order'], callback_data="nav_restart")],
+            [InlineKeyboardButton(txt['btn_cancel_order'], callback_data="ask_cancel")]
+        ]
+        await query.edit_message_text(txt['success'], reply_markup=InlineKeyboardMarkup(keyboard))
+        return
+    elif data == "confirm_cancel":
+        txt = LANGUAGES[lang]
+        await query.edit_message_text(txt['cancelled'])
+        
+        # Уведомление админу об отмене
+        if ADMIN_CHAT_ID:
+            user = update.effective_user
+            cancel_msg = (
+                f"🚫 **ЗАЯВКА ОТМЕНЕНА КЛИЕНТОМ!**\n"
+                f"👤 Клиент: {user.full_name} (@{user.username or 'нет'})\n"
+                f"🛣 Маршрут: {context.user_data.get('route')}\n"
+                f"📅 Дата: {context.user_data.get('date')}\n"
+                f"📞 Телефон: {context.user_data.get('phone')}"
+            )
+            await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=cancel_msg, parse_mode='Markdown')
+        return
 
-    context.user_data['date'] = date_choice
-    await update.message.reply_text(texts['time_prompt'], reply_markup=ReplyKeyboardRemove())
-    return TIME
+    await render_step(query, context)
 
-async def set_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['time'] = update.message.text
-    lang = context.user_data.get('lang', 'RU')
-    texts = LANG_TEXTS[lang]
+# Отображение шагов в центральной карточке
+async def render_step(query, context: ContextTypes.DEFAULT_TYPE):
+    lang = context.user_data.get('lang', 'ua')
+    txt = LANGUAGES[lang]
+    step = context.user_data.get('step', 'route')
+    
+    keyboard = []
+    
+    if step == 'route':
+        text = txt['welcome']
+        for r in txt['routes']:
+            keyboard.append([InlineKeyboardButton(r, callback_data=r)])
+        keyboard.append(get_nav_buttons(lang, show_back=False))
+        
+    elif step == 'date':
+        text = txt['select_date']
+        keyboard.append([InlineKeyboardButton(txt['dates'][0], callback_data=txt['dates'][0]),
+                         InlineKeyboardButton(txt['dates'][1], callback_data=txt['dates'][1])])
+        keyboard.append([InlineKeyboardButton(txt['dates'][2], callback_data="custom_date")])
+        keyboard.append(get_nav_buttons(lang))
+        
+    elif step == 'time':
+        text = txt['select_time']
+        row = [InlineKeyboardButton(t, callback_data=t) for t in txt['times'][:4]]
+        keyboard.append(row)
+        keyboard.append([InlineKeyboardButton(txt['times'][4], callback_data="custom_time")])
+        keyboard.append(get_nav_buttons(lang))
+        
+    elif step == 'passengers':
+        text = txt['select_passengers']
+        row = [InlineKeyboardButton(p, callback_data=p) for p in txt['passengers']]
+        keyboard.append(row)
+        keyboard.append(get_nav_buttons(lang))
+        
+    elif step == 'luggage':
+        text = txt['select_luggage']
+        for l in txt['luggages']:
+            keyboard.append([InlineKeyboardButton(l, callback_data=l)])
+        keyboard.append(get_nav_buttons(lang))
+        
+    elif step == 'phone':
+        text = txt['share_phone']
+        # Показываем нижнюю клавиатуру для отправки контактов
+        reply_markup = ReplyKeyboardMarkup(
+            [[KeyboardButton(txt['btn_phone'], request_contact=True)]],
+            resize_keyboard=True,
+            one_time_keyboard=True
+        )
+        await query.message.reply_text(text, reply_markup=reply_markup)
+        return
 
-    await update.message.reply_text(
-        texts['passengers_prompt'],
-        reply_markup=ReplyKeyboardMarkup(texts['passengers'], one_time_keyboard=True, resize_keyboard=True)
-    )
-    return PASSENGERS
+    markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text(text=text, reply_markup=markup)
 
-async def set_passengers(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    pass_choice = update.message.text
-    lang = context.user_data.get('lang', 'RU')
-    texts = LANG_TEXTS[lang]
+# Обработка пользовательского текста (Удаление сообщений для чистоты чата)
+async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await safe_delete_user_msg(context, update.effective_chat.id, update.message.message_id)
+    
+    awaiting = context.user_data.get('awaiting_text')
+    card_msg_id = context.user_data.get('card_msg_id')
+    user_text = update.message.text
+    
+    if not awaiting or not card_msg_id:
+        return
+        
+    if awaiting == 'date':
+        context.user_data['date'] = user_text
+        context.user_data['step'] = 'time'
+    elif awaiting == 'time':
+        context.user_data['time'] = user_text
+        context.user_data['step'] = 'passengers'
+    elif awaiting == 'address':
+        context.user_data['address'] = user_text
+        context.user_data['step'] = 'phone'
+        
+    context.user_data['awaiting_text'] = None
+    
+    # Обновляем центральную карточку
+    class DummyQuery:
+        def __init__(self, msg):
+            self.message = msg
+        async def edit_message_text(self, text, reply_markup=None):
+            await context.bot.edit_message_text(
+                chat_id=self.message.chat_id,
+                message_id=self.message.message_id,
+                text=text,
+                reply_markup=reply_markup
+            )
+            
+    dummy_msg = type('Msg', (), {'chat_id': update.effective_chat.id, 'message_id': card_msg_id})()
+    await render_step(DummyQuery(dummy_msg), context)
 
-    if '✏️' in pass_choice:
-        await update.message.reply_text(texts['passengers_custom_prompt'], reply_markup=ReplyKeyboardRemove())
-        return PASSENGERS
-
-    context.user_data['passengers'] = pass_choice
-    await update.message.reply_text(
-        texts['luggage_prompt'],
-        reply_markup=ReplyKeyboardMarkup(texts['luggage'], one_time_keyboard=True, resize_keyboard=True)
-    )
-    return LUGGAGE
-
-async def set_luggage(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    lugg_choice = update.message.text
-    lang = context.user_data.get('lang', 'RU')
-    texts = LANG_TEXTS[lang]
-
-    if '✏️' in lugg_choice:
-        await update.message.reply_text(texts['luggage_custom_prompt'], reply_markup=ReplyKeyboardRemove())
-        return LUGGAGE
-
-    context.user_data['luggage'] = lugg_choice
-    await update.message.reply_text(
-        texts['transfer_prompt'],
-        reply_markup=ReplyKeyboardMarkup(texts['transfer_types'], one_time_keyboard=True, resize_keyboard=True)
-    )
-    return TRANSFER_TYPE
-
-async def set_transfer_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['transfer_type'] = update.message.text
-    lang = context.user_data.get('lang', 'RU')
-    texts = LANG_TEXTS[lang]
-
-    phone_btn = ReplyKeyboardMarkup(
-        [[KeyboardButton(texts['phone_btn'], request_contact=True)]],
-        one_time_keyboard=True,
-        resize_keyboard=True
-    )
-    await update.message.reply_text(texts['phone_prompt'], reply_markup=phone_btn)
-    return PHONE
-
-async def set_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# Обработка полученного контакта и отправка заявки
+async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await safe_delete_user_msg(context, update.effective_chat.id, update.message.message_id)
+    
     contact = update.message.contact
-    phone = contact.phone_number if contact else update.message.text
+    phone = contact.phone_number
     context.user_data['phone'] = phone
+    lang = context.user_data.get('lang', 'ua')
+    txt = LANGUAGES[lang]
 
-    lang = context.user_data.get('lang', 'RU')
-    texts = LANG_TEXTS[lang]
+    # Убираем нижнюю клавиатуру контакта
+    hide_kb = await update.message.reply_text(".", reply_markup=ReplyKeyboardRemove())
+    await safe_delete_user_msg(context, update.effective_chat.id, hide_kb.message_id)
 
-    user = update.effective_user
-    username = f"@{user.username}" if user.username else "нет username"
-
-    admin_card = (
-        "📥 НОВАЯ ЗАЯВКА НА ТРАНСФЕР!\n\n"
-        f"👤 Клиент: {user.full_name} ({username})\n"
-        f"🌐 Язык: {lang}\n"
-        f"🛣 Маршрут: {context.user_data.get('route')}\n"
-        f"📍 Адрес: {context.user_data.get('address')}\n"
-        f"📅 Дата: {context.user_data.get('date')}\n"
-        f"⏰ Время/Рейс: {context.user_data.get('time')}\n"
-        f"👥 Пассажиры: {context.user_data.get('passengers')}\n"
-        f"🧳 Багаж: {context.user_data.get('luggage')}\n"
-        f"🚘 Тип: {context.user_data.get('transfer_type')}\n"
-        f"📞 Телефон: {phone}"
-    )
-
+    # Сообщение администратору
     if ADMIN_CHAT_ID:
-        try:
-            await context.bot.send_message(chat_id=int(ADMIN_CHAT_ID), text=admin_card)
-        except Exception as e:
-            print(f"Ошибка отправки администратору: {e}")
+        user = update.effective_user
+        order_msg = (
+            f"📥 **НОВАЯ ЗАЯВКА НА ТРАНСФЕР!**\n\n"
+            f"👤 **Пассажир:** {user.full_name} (@{user.username or 'нет'})\n"
+            f"📞 **Телефон:** `{phone}`\n"
+            f"🛣 **Маршрут:** {context.user_data.get('route')}\n"
+            f"📅 **Дата:** {context.user_data.get('date')}\n"
+            f"⏰ **Время:** {context.user_data.get('time')}\n"
+            f"👥 **Пассажиры:** {context.user_data.get('passengers')}\n"
+            f"🧳 **Багаж:** {context.user_data.get('luggage')}\n"
+            f"📍 **Адрес:** {context.user_data.get('address')}"
+        )
+        await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=order_msg, parse_mode='Markdown')
 
-    await update.message.reply_text(texts['success'], reply_markup=ReplyKeyboardRemove())
-    return ConversationHandler.END
+    # Обновление центрального сообщения с кнопками управления
+    card_msg_id = context.user_data.get('card_msg_id')
+    keyboard = [
+        [InlineKeyboardButton(txt['btn_new_order'], callback_data="nav_restart")],
+        [InlineKeyboardButton(txt['btn_cancel_order'], callback_data="ask_cancel")]
+    ]
+    markup = InlineKeyboardMarkup(keyboard)
+    
+    if card_msg_id:
+        await context.bot.edit_message_text(
+            chat_id=update.effective_chat.id,
+            message_id=card_msg_id,
+            text=txt['success'],
+            reply_markup=markup
+        )
 
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Отменено / Cancelled.", reply_markup=ReplyKeyboardRemove())
-    return ConversationHandler.END
+# Регистрируем обработчики Telegram
+tg_app.add_handler(CommandHandler("start", start_command))
+tg_app.add_handler(CallbackQueryHandler(handle_callback))
+tg_app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
+tg_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_input))
 
-def main():
-    threading.Thread(target=run_flask, daemon=True).start()
+# --- Flask роуты ---
 
-    app_bot = ApplicationBuilder().token(BOT_TOKEN).build()
+@app.route('/', methods=['GET'])
+def index():
+    return "Chelm Transfer Bot is running 24/7!", 200
 
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('start', start)],
-        states={
-            LANGUAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_language)],
-            ROUTE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_route)],
-            ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_address)],
-            DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_date)],
-            TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_time)],
-            PASSENGERS: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_passengers)],
-            LUGGAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_luggage)],
-            TRANSFER_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_transfer_type)],
-            PHONE: [
-                MessageHandler(filters.CONTACT, set_phone),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, set_phone)
-            ],
-        },
-        fallbacks=[CommandHandler('cancel', cancel)],
-    )
-
-    app_bot.add_handler(conv_handler)
-    app_bot.run_polling()
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    if request.method == "POST":
+        update = Update.de_json(request.get_json(force=True), tg_app.bot)
+        tg_app.update_queue.put_nowait(update)
+        return "ok", 200
 
 if __name__ == '__main__':
-    main()
+    # Автоматическая установка Webhook при запуске
+    import asyncio
+    async def init_webhook():
+        if WEBHOOK_URL:
+            url = f"{WEBHOOK_URL.rstrip('/')}/webhook"
+            await tg_app.bot.set_webhook(url=url)
+            logger.info(f"Webhook set to {url}")
+            
+    asyncio.run(init_webhook())
+    tg_app.run_polling()
