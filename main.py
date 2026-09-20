@@ -36,6 +36,15 @@ ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID")
 # Контакт менеджера для срочной связи
 MANAGER_CONTACT = "@ALKUNTR"
 
+def escape_markdown(text: str) -> str:
+    """Безопасное экранирование специальных символов Markdown"""
+    if not text:
+        return "-"
+    # Экранируем спецсимволы Markdown V1
+    for char in ['_', '*', '`', '[']:
+        text = str(text).replace(char, f'\\{char}')
+    return text
+
 LANGUAGES = {
     'ua': {
         'welcome': "Вітаємо! Оберіть напрямок поїздки:",
@@ -59,7 +68,7 @@ LANGUAGES = {
         'share_phone': "📱 Натисніть кнопку нижче, щоб передати номер телефону:",
         'btn_phone': "📱 Поділитися номером телефону",
         'summary_title': "📋 **Перевірте дані вашої заявки:**",
-        'urgent_contact': f"⚡️ У разі терміновості ви можете зв'язатися з менеджером напряму: {MANAGER_CONTACT}",
+        'urgent_contact': f"⚡️ У разі терміновості ви можете зв'язатися з менеджером напряму: {escape_markdown(MANAGER_CONTACT)}",
         'success': "✅ Дякуємо! Вашу заявку прийнято. Менеджер зв'яжеться з вами найближчим часом.",
         'cancelled': "❌ Вашу заявку скасовано.",
         'btn_back': "⬅️ Назад",
@@ -92,7 +101,7 @@ LANGUAGES = {
         'share_phone': "📱 Kliknij przycisk poniżej, aby udostępnić numer:",
         'btn_phone': "📱 Udostępnij numer telefonu",
         'summary_title': "📋 **Sprawdź szczegóły zamówienia:**",
-        'urgent_contact': f"⚡️ W pilnych sprawach możesz skontaktować się bezpośrednio z menedżerem: {MANAGER_CONTACT}",
+        'urgent_contact': f"⚡️ W pilnych sprawach możesz skontaktować się bezpośrednio z menedżerem: {escape_markdown(MANAGER_CONTACT)}",
         'success': "✅ Dziękujemy! Zgłoszenie zostało przyjęte. Menedżer skontaktuje się z Tobą.",
         'cancelled': "❌ Twoje zgłoszenie zostało anulowane.",
         'btn_back': "⬅️ Wstecz",
@@ -125,7 +134,7 @@ LANGUAGES = {
         'share_phone': "📱 Press the button below to share your phone number:",
         'btn_phone': "📱 Share phone number",
         'summary_title': "📋 **Please review your booking:**",
-        'urgent_contact': f"⚡️ In case of urgency, you can contact the manager directly: {MANAGER_CONTACT}",
+        'urgent_contact': f"⚡️ In case of urgency, you can contact the manager directly: {escape_markdown(MANAGER_CONTACT)}",
         'success': "✅ Thank you! Your booking is received. Manager will contact you shortly.",
         'cancelled': "❌ Your booking has been cancelled.",
         'btn_back': "⬅️ Back",
@@ -158,7 +167,7 @@ LANGUAGES = {
         'share_phone': "📱 Нажмите кнопку внизу, чтобы передать номер телефона:",
         'btn_phone': "📱 Поделиться номером телефона",
         'summary_title': "📋 **Проверьте данные вашей заявки:**",
-        'urgent_contact': f"⚡️ В случае срочности вы можете связаться с менеджером напрямую: {MANAGER_CONTACT}",
+        'urgent_contact': f"⚡️ В случае срочности вы можете связаться с менеджером напрямую: {escape_markdown(MANAGER_CONTACT)}",
         'success': "✅ Спасибо! Ваша заявка принята. Менеджер свяжется с вами в ближайшее время.",
         'cancelled': "❌ Ваша заявка отменена.",
         'btn_back': "⬅️ Назад",
@@ -183,16 +192,16 @@ def build_summary_text(context_data, lang_code):
     txt = LANGUAGES[lang_code]
     summary = (
         f"{txt['summary_title']}\n\n"
-        f"🛣 **Маршрут:** {context_data.get('route', '-')}\n"
-        f"🚘 **Тип трансфера:** {context_data.get('transfer_type', '-')}\n"
-        f"📅 **Дата:** {context_data.get('date', '-')}\n"
-        f"⏰ **Время:** {context_data.get('time', '-')}\n"
-        f"👥 **Пассажиры:** {context_data.get('passengers', '-')}\n"
-        f"🧳 **Багаж:** {context_data.get('luggage', '-')}\n"
-        f"📍 **Посадка:** {context_data.get('pickup', '-')}\n"
-        f"🏁 **Высадка:** {context_data.get('dropoff', '-')}\n"
-        f"💬 **Связь:** {context_data.get('comm_channel', '-')}\n"
-        f"📞 **Телефон:** `{context_data.get('phone', '-')}`\n\n"
+        f"🛣 **Маршрут:** {escape_markdown(context_data.get('route', '-'))}\n"
+        f"🚘 **Тип трансфера:** {escape_markdown(context_data.get('transfer_type', '-'))}\n"
+        f"📅 **Дата:** {escape_markdown(context_data.get('date', '-'))}\n"
+        f"⏰ **Время:** {escape_markdown(context_data.get('time', '-'))}\n"
+        f"👥 **Пассажиры:** {escape_markdown(context_data.get('passengers', '-'))}\n"
+        f"🧳 **Багаж:** {escape_markdown(context_data.get('luggage', '-'))}\n"
+        f"📍 **Посадка:** {escape_markdown(context_data.get('pickup', '-'))}\n"
+        f"🏁 **Высадка:** {escape_markdown(context_data.get('dropoff', '-'))}\n"
+        f"💬 **Связь:** {escape_markdown(context_data.get('comm_channel', '-'))}\n"
+        f"📞 **Телефон:** `{escape_markdown(context_data.get('phone', '-'))}`\n\n"
         f"{txt['success']}\n\n"
         f"{txt['urgent_contact']}"
     )
@@ -321,10 +330,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user = update.effective_user
             cancel_msg = (
                 f"🚫 **ЗАЯВКА ОТМЕНЕНА КЛИЕНТОМ!**\n"
-                f"👤 Клиент: {user.full_name} (@{user.username or 'нет'})\n"
-                f"🛣 Маршрут: {context.user_data.get('route', 'Не указан')}\n"
-                f"📅 Дата: {context.user_data.get('date', 'Не указана')}\n"
-                f"📞 Телефон: {context.user_data.get('phone', 'Не указан')}"
+                f"👤 Клиент: {escape_markdown(user.full_name)} (@{escape_markdown(user.username or 'нет')})\n"
+                f"🛣 Маршрут: {escape_markdown(context.user_data.get('route', 'Не указан'))}\n"
+                f"📅 Дата: {escape_markdown(context.user_data.get('date', 'Не указана'))}\n"
+                f"📞 Телефон: `{escape_markdown(context.user_data.get('phone', 'Не указан'))}`"
             )
             try:
                 await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=cancel_msg, parse_mode='Markdown')
@@ -418,11 +427,13 @@ async def render_step(query_or_dummy, context: ContextTypes.DEFAULT_TYPE):
             one_time_keyboard=True
         )
         chat_id = context.user_data.get('chat_id', query_or_dummy.message.chat_id if hasattr(query_or_dummy, 'message') else query_or_dummy.chat_id)
-        await context.bot.send_message(
+        
+        msg = await context.bot.send_message(
             chat_id=chat_id,
             text=txt['share_phone'],
             reply_markup=reply_markup
         )
+        context.user_data['phone_msg_id'] = msg.message_id
         return
 
     markup = InlineKeyboardMarkup(keyboard)
@@ -476,6 +487,10 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await safe_delete_user_msg(context, update.effective_chat.id, update.message.message_id)
     
+    # Удаление сообщения с кнопкой запроса контактов
+    if 'phone_msg_id' in context.user_data:
+        await safe_delete_user_msg(context, update.effective_chat.id, context.user_data['phone_msg_id'])
+    
     contact = update.message.contact
     phone = contact.phone_number if contact else update.message.text
     context.user_data['phone'] = phone
@@ -486,17 +501,17 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         order_msg = (
             f"📥 **НОВАЯ ЗАЯВКА НА ТРАНСФЕР!**\n\n"
-            f"👤 **Пассажир:** {user.full_name} (@{user.username or 'нет'})\n"
-            f"📞 **Телефон:** `{phone}`\n"
-            f"🚘 **Тип поездки:** {context.user_data.get('transfer_type', 'Не указан')}\n"
-            f"🛣 **Маршрут:** {context.user_data.get('route', 'Не указан')}\n"
-            f"📅 **Дата:** {context.user_data.get('date', 'Не указана')}\n"
-            f"⏰ **Время:** {context.user_data.get('time', 'Не указано')}\n"
-            f"👥 **Пассажиры:** {context.user_data.get('passengers', 'Не указано')}\n"
-            f"🧳 **Багаж:** {context.user_data.get('luggage', 'Не указан')}\n"
-            f"📍 **Место посадки:** {context.user_data.get('pickup', 'Не указано')}\n"
-            f"🏁 **Место высадки:** {context.user_data.get('dropoff', 'Не указано')}\n"
-            f"💬 **Предпочтительный канал:** {context.user_data.get('comm_channel', 'Не указан')}"
+            f"👤 **Пассажир:** {escape_markdown(user.full_name)} (@{escape_markdown(user.username or 'нет')})\n"
+            f"📞 **Телефон:** `{escape_markdown(phone)}`\n"
+            f"🚘 **Тип поездки:** {escape_markdown(context.user_data.get('transfer_type', 'Не указан'))}\n"
+            f"🛣 **Маршрут:** {escape_markdown(context.user_data.get('route', 'Не указан'))}\n"
+            f"📅 **Дата:** {escape_markdown(context.user_data.get('date', 'Не указана'))}\n"
+            f"⏰ **Время:** {escape_markdown(context.user_data.get('time', 'Не указано'))}\n"
+            f"👥 **Пассажиры:** {escape_markdown(context.user_data.get('passengers', 'Не указано'))}\n"
+            f"🧳 **Багаж:** {escape_markdown(context.user_data.get('luggage', 'Не указан'))}\n"
+            f"📍 **Место посадки:** {escape_markdown(context.user_data.get('pickup', 'Не указано'))}\n"
+            f"🏁 **Место высадки:** {escape_markdown(context.user_data.get('dropoff', 'Не указано'))}\n"
+            f"💬 **Предпочтительный канал:** {escape_markdown(context.user_data.get('comm_channel', 'Не указан'))}"
         )
         try:
             await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=order_msg, parse_mode='Markdown')
@@ -523,9 +538,11 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         except Exception as e:
             logger.error(f"Error updating card message: {e}")
-            
-    await update.message.reply_text(
-        txt['success'], 
+
+    # Удаление нижней Reply-клавиатуры
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=txt['success'],
         reply_markup=ReplyKeyboardRemove()
     )
 
