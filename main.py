@@ -3,14 +3,31 @@ import logging
 import asyncio
 import threading
 from flask import Flask
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+from telegram import (
+    Update, 
+    InlineKeyboardButton, 
+    InlineKeyboardMarkup, 
+    ReplyKeyboardMarkup, 
+    KeyboardButton, 
+    ReplyKeyboardRemove
+)
+from telegram.ext import (
+    Application, 
+    CommandHandler, 
+    CallbackQueryHandler, 
+    MessageHandler, 
+    filters, 
+    ContextTypes
+)
 
 # Настройка логов
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", 
+    level=logging.INFO
+)
 logger = logging.getLogger(__name__)
 
-# Flask для поддержки Render Web Service (порты)
+# Инициализация Flask для поддержания порта на Render
 app = Flask(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -31,12 +48,12 @@ LANGUAGES = {
         'select_luggage': "Оберіть кількість багажу:",
         'luggages': ["Без багажу", "1 валіза", "2 валізи", "🧳 Багато багажу"],
         'enter_address': "Введіть точну адресу посадки/висадки у чат:",
-        'share_phone': "📱 Натисніть синю кнопку внизу, щоб передати номер телефону:",
+        'share_phone': "📱 Натисніть кнопку нижче, щоб передати номер телефону:",
         'btn_phone': "📱 Поділитися номером телефону",
         'success': "✅ Дякуємо! Вашу заявку прийнято. Менеджер зв'яжеться з вами найближчим часом.",
         'cancelled': "❌ Вашу заявку скасовано.",
         'btn_back': "⬅️ Назад",
-        'btn_restart': "🔄 Начати спочатку",
+        'btn_restart': "🔄 Почати спочатку",
         'btn_new_order': "➕ Оформити нову заявку",
         'btn_cancel_order': "❌ Скасувати заявку",
         'confirm_cancel': "Ви впевнені, що хочете скасувати цю заявку?",
@@ -57,7 +74,7 @@ LANGUAGES = {
         'select_luggage': "Wybierz ilość bagażu:",
         'luggages': ["Bez bagażu", "1 walizka", "2 walizki", "🧳 Dużo bagażu"],
         'enter_address': "Wpisz dokładny adres odbioru/dojazdu na czacie:",
-        'share_phone': "📱 Kliknij niebieski przycisk na dole, aby udostępnić numer:",
+        'share_phone': "📱 Kliknij przycisk poniżej, aby udostępnić numer:",
         'btn_phone': "📱 Udostępnij numer telefonu",
         'success': "✅ Dziękujemy! Zgłoszenie zostało przyjęte. Menedżer skontaktuje się z Tobą.",
         'cancelled': "❌ Twoje zgłoszenie zostało anulowane.",
@@ -83,7 +100,7 @@ LANGUAGES = {
         'select_luggage': "Select luggage amount:",
         'luggages': ["No luggage", "1 suitcase", "2 suitcases", "🧳 Heavy luggage"],
         'enter_address': "Type exact pick-up/drop-off address in chat:",
-        'share_phone': "📱 Press the blue button at the bottom to share your phone number:",
+        'share_phone': "📱 Press the button below to share your phone number:",
         'btn_phone': "📱 Share phone number",
         'success': "✅ Thank you! Your booking is received. Manager will contact you shortly.",
         'cancelled': "❌ Your booking has been cancelled.",
@@ -109,7 +126,7 @@ LANGUAGES = {
         'select_luggage': "Выберите количество багажа:",
         'luggages': ["Без багажа", "1 чемодан", "2 чемодана", "🧳 Много багажа"],
         'enter_address': "Введите точный адрес посадки/высадки в чат:",
-        'share_phone': "📱 Нажмите синюю кнопку внизу, чтобы передать номер телефона:",
+        'share_phone': "📱 Нажмите кнопку внизу, чтобы передать номер телефона:",
         'btn_phone': "📱 Поделиться номером телефона",
         'success': "✅ Спасибо! Ваша заявка принята. Менеджер свяжется с вами в ближайшее время.",
         'cancelled': "❌ Ваша заявка отменена.",
@@ -146,7 +163,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
          InlineKeyboardButton("🇷🇺 Русский", callback_data="lang_ru")]
     ]
     markup = InlineKeyboardMarkup(keyboard)
-    text = " Please select your language / Оберіть мову:"
+    text = "🌐 Please select your language / Оберіть мову:"
     
     if update.callback_query:
         await update.callback_query.answer()
@@ -249,7 +266,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"📅 Дата: {context.user_data.get('date')}\n"
                 f"📞 Телефон: {context.user_data.get('phone')}"
             )
-            await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=cancel_msg, parse_mode='Markdown')
+            try:
+                await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=cancel_msg, parse_mode='Markdown')
+            except Exception as e:
+                logger.error(f"Error sending cancellation to admin: {e}")
         return
 
     await render_step(query, context)
@@ -367,7 +387,10 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🧳 **Багаж:** {context.user_data.get('luggage')}\n"
             f"📍 **Адрес:** {context.user_data.get('address')}"
         )
-        await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=order_msg, parse_mode='Markdown')
+        try:
+            await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=order_msg, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error sending order to admin: {e}")
 
     card_msg_id = context.user_data.get('card_msg_id')
     keyboard = [
@@ -384,14 +407,22 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=markup
         )
 
-# Роут для поддержания активности на Render
+# Роут веб-сервера
 @app.route('/')
 def index():
     return "Bot is alive!", 200
 
-def run_bot_thread():
-    """Запускает бота в отдельном потоке со своим event loop"""
-    asyncio.set_event_loop(asyncio.new_event_loop())
+def run_flask():
+    """Фоновый запуск веб-сервера Flask для Render"""
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port, use_reloader=False)
+
+async def main():
+    """Главная асинхронная точка входа для запуска бота"""
+    if not BOT_TOKEN:
+        logger.error("BOT_TOKEN variable is missing!")
+        return
+
     tg_app = Application.builder().token(BOT_TOKEN).build()
 
     tg_app.add_handler(CommandHandler("start", start_command))
@@ -399,13 +430,25 @@ def run_bot_thread():
     tg_app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
     tg_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_input))
 
-    tg_app.run_polling(drop_pending_updates=True)
+    # Сброс старых обновлений/вебхуков при старте
+    await tg_app.initialize()
+    await tg_app.start()
+    await tg_app.updater.start_polling(drop_pending_updates=True)
+    
+    logger.info("Bot successfully started in polling mode!")
+
+    # Держим событийный цикл активным
+    try:
+        while True:
+            await asyncio.sleep(3600)
+    except (KeyboardInterrupt, SystemExit):
+        await tg_app.updater.stop()
+        await tg_app.stop()
 
 if __name__ == '__main__':
-    # Запуск фонового потока бота
-    bot_thread = threading.Thread(target=run_bot_thread, daemon=True)
-    bot_thread.start()
+    # Запускаем Flask на отдельном фоне
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
 
-    # Запуск Flask на порту Render
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+    # Основной поток передаем под асинхронную работу Telegram-бота
+    asyncio.run(main())
