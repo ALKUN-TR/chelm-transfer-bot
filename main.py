@@ -27,11 +27,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Инициализация Flask для поддержания работы на Render
+# Инициализация Flask для Render
 app = Flask(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID")
+
+# Контакт менеджера для срочной связи
+MANAGER_CONTACT = "@ALKUNTR"
 
 LANGUAGES = {
     'ua': {
@@ -56,6 +59,7 @@ LANGUAGES = {
         'share_phone': "📱 Натисніть кнопку нижче, щоб передати номер телефону:",
         'btn_phone': "📱 Поділитися номером телефону",
         'summary_title': "📋 **Перевірте дані вашої заявки:**",
+        'urgent_contact': f"⚡️ У разі терміновості ви можете зв'язатися з менеджером напряму: {MANAGER_CONTACT}",
         'success': "✅ Дякуємо! Вашу заявку прийнято. Менеджер зв'яжеться з вами найближчим часом.",
         'cancelled': "❌ Вашу заявку скасовано.",
         'btn_back': "⬅️ Назад",
@@ -88,6 +92,7 @@ LANGUAGES = {
         'share_phone': "📱 Kliknij przycisk poniżej, aby udostępnić numer:",
         'btn_phone': "📱 Udostępnij numer telefonu",
         'summary_title': "📋 **Sprawdź szczegóły zamówienia:**",
+        'urgent_contact': f"⚡️ W pilnych sprawach możesz skontaktować się bezpośrednio z menedżerem: {MANAGER_CONTACT}",
         'success': "✅ Dziękujemy! Zgłoszenie zostało przyjęte. Menedżer skontaktuje się z Tobą.",
         'cancelled': "❌ Twoje zgłoszenie zostało anulowane.",
         'btn_back': "⬅️ Wstecz",
@@ -120,6 +125,7 @@ LANGUAGES = {
         'share_phone': "📱 Press the button below to share your phone number:",
         'btn_phone': "📱 Share phone number",
         'summary_title': "📋 **Please review your booking:**",
+        'urgent_contact': f"⚡️ In case of urgency, you can contact the manager directly: {MANAGER_CONTACT}",
         'success': "✅ Thank you! Your booking is received. Manager will contact you shortly.",
         'cancelled': "❌ Your booking has been cancelled.",
         'btn_back': "⬅️ Back",
@@ -152,6 +158,7 @@ LANGUAGES = {
         'share_phone': "📱 Нажмите кнопку внизу, чтобы передать номер телефона:",
         'btn_phone': "📱 Поделиться номером телефона",
         'summary_title': "📋 **Проверьте данные вашей заявки:**",
+        'urgent_contact': f"⚡️ В случае срочности вы можете связаться с менеджером напрямую: {MANAGER_CONTACT}",
         'success': "✅ Спасибо! Ваша заявка принята. Менеджер свяжется с вами в ближайшее время.",
         'cancelled': "❌ Ваша заявка отменена.",
         'btn_back': "⬅️ Назад",
@@ -176,17 +183,18 @@ def build_summary_text(context_data, lang_code):
     txt = LANGUAGES[lang_code]
     summary = (
         f"{txt['summary_title']}\n\n"
-        f"🛣 **Маршрут / Route:** {context_data.get('route', '-')}\n"
-        f"🚘 **Тип трансфера / Type:** {context_data.get('transfer_type', '-')}\n"
-        f"📅 **Дата / Date:** {context_data.get('date', '-')}\n"
-        f"⏰ **Время / Time:** {context_data.get('time', '-')}\n"
-        f"👥 **Пассажиры / Passengers:** {context_data.get('passengers', '-')}\n"
-        f"🧳 **Багаж / Luggage:** {context_data.get('luggage', '-')}\n"
-        f"📍 **Посадка / Pickup:** {context_data.get('pickup', '-')}\n"
-        f"🏁 **Высадка / Dropoff:** {context_data.get('dropoff', '-')}\n"
-        f"💬 **Связь / Contact via:** {context_data.get('comm_channel', '-')}\n"
-        f"📞 **Телефон / Phone:** `{context_data.get('phone', '-')}`\n\n"
-        f"{txt['success']}"
+        f"🛣 **Маршрут:** {context_data.get('route', '-')}\n"
+        f"🚘 **Тип трансфера:** {context_data.get('transfer_type', '-')}\n"
+        f"📅 **Дата:** {context_data.get('date', '-')}\n"
+        f"⏰ **Время:** {context_data.get('time', '-')}\n"
+        f"👥 **Пассажиры:** {context_data.get('passengers', '-')}\n"
+        f"🧳 **Багаж:** {context_data.get('luggage', '-')}\n"
+        f"📍 **Посадка:** {context_data.get('pickup', '-')}\n"
+        f"🏁 **Высадка:** {context_data.get('dropoff', '-')}\n"
+        f"💬 **Связь:** {context_data.get('comm_channel', '-')}\n"
+        f"📞 **Телефон:** `{context_data.get('phone', '-')}`\n\n"
+        f"{txt['success']}\n\n"
+        f"{txt['urgent_contact']}"
     )
     return summary
 
@@ -304,7 +312,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     elif data == "confirm_cancel":
         txt = LANGUAGES[lang]
-        await query.edit_message_text(txt['cancelled'])
+        keyboard = [
+            [InlineKeyboardButton(txt['btn_new_order'], callback_data="nav_restart")]
+        ]
+        await query.edit_message_text(txt['cancelled'], reply_markup=InlineKeyboardMarkup(keyboard))
         
         if ADMIN_CHAT_ID:
             user = update.effective_user
