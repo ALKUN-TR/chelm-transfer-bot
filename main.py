@@ -1,6 +1,5 @@
 import os
 import logging
-import asyncio
 import threading
 from flask import Flask
 from telegram import (
@@ -20,7 +19,7 @@ from telegram.ext import (
     ContextTypes
 )
 
-# Настройка логов
+# Настройка логирования
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", 
     level=logging.INFO
@@ -36,14 +35,14 @@ ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID")
 # Контакт менеджера для срочной связи
 MANAGER_CONTACT = "@ALKUNTR"
 
-def escape_markdown(text: str) -> str:
-    """Безопасное экранирование специальных символов Markdown"""
-    if not text:
+def escape_markdown(text) -> str:
+    """Безопасное экранирование специальных символов Markdown V1"""
+    if text is None or text == "":
         return "-"
-    # Экранируем спецсимволы Markdown V1
+    text_str = str(text)
     for char in ['_', '*', '`', '[']:
-        text = str(text).replace(char, f'\\{char}')
-    return text
+        text_str = text_str.replace(char, f'\\{char}')
+    return text_str
 
 LANGUAGES = {
     'ua': {
@@ -192,16 +191,16 @@ def build_summary_text(context_data, lang_code):
     txt = LANGUAGES[lang_code]
     summary = (
         f"{txt['summary_title']}\n\n"
-        f"🛣 **Маршрут:** {escape_markdown(context_data.get('route', '-'))}\n"
-        f"🚘 **Тип трансфера:** {escape_markdown(context_data.get('transfer_type', '-'))}\n"
-        f"📅 **Дата:** {escape_markdown(context_data.get('date', '-'))}\n"
-        f"⏰ **Время:** {escape_markdown(context_data.get('time', '-'))}\n"
-        f"👥 **Пассажиры:** {escape_markdown(context_data.get('passengers', '-'))}\n"
-        f"🧳 **Багаж:** {escape_markdown(context_data.get('luggage', '-'))}\n"
-        f"📍 **Посадка:** {escape_markdown(context_data.get('pickup', '-'))}\n"
-        f"🏁 **Высадка:** {escape_markdown(context_data.get('dropoff', '-'))}\n"
-        f"💬 **Связь:** {escape_markdown(context_data.get('comm_channel', '-'))}\n"
-        f"📞 **Телефон:** `{escape_markdown(context_data.get('phone', '-'))}`\n\n"
+        f"🛣 **Маршрут:** {escape_markdown(context_data.get('route'))}\n"
+        f"🚘 **Тип трансфера:** {escape_markdown(context_data.get('transfer_type'))}\n"
+        f"📅 **Дата:** {escape_markdown(context_data.get('date'))}\n"
+        f"⏰ **Время:** {escape_markdown(context_data.get('time'))}\n"
+        f"👥 **Пассажиры:** {escape_markdown(context_data.get('passengers'))}\n"
+        f"🧳 **Багаж:** {escape_markdown(context_data.get('luggage'))}\n"
+        f"📍 **Посадка:** {escape_markdown(context_data.get('pickup'))}\n"
+        f"🏁 **Высадка:** {escape_markdown(context_data.get('dropoff'))}\n"
+        f"💬 **Связь:** {escape_markdown(context_data.get('comm_channel'))}\n"
+        f"📞 **Телефон:** `{escape_markdown(context_data.get('phone'))}`\n\n"
         f"{txt['success']}\n\n"
         f"{txt['urgent_contact']}"
     )
@@ -487,7 +486,6 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await safe_delete_user_msg(context, update.effective_chat.id, update.message.message_id)
     
-    # Удаление сообщения с кнопкой запроса контактов
     if 'phone_msg_id' in context.user_data:
         await safe_delete_user_msg(context, update.effective_chat.id, context.user_data['phone_msg_id'])
     
@@ -539,28 +537,31 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             logger.error(f"Error updating card message: {e}")
 
-    # Удаление нижней Reply-клавиатуры
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text=txt['success'],
         reply_markup=ReplyKeyboardRemove()
     )
 
-# Роут веб-сервера
+# Роут веб-сервера для Render
 @app.route('/')
 def index():
     return "Bot is alive!", 200
 
 def run_flask():
-    """Фоновый запуск веб-сервера Flask для Render"""
+    """Фоновый запуск веб-сервера Flask"""
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port, use_reloader=False)
 
-async def main():
-    """Главная асинхронная точка входа для запуска бота"""
+def main():
+    """Главная точка входа"""
     if not BOT_TOKEN:
         logger.error("BOT_TOKEN variable is missing!")
         return
+
+    # Запуск Flask в фоновом потоке
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
 
     tg_app = Application.builder().token(BOT_TOKEN).build()
 
@@ -569,21 +570,8 @@ async def main():
     tg_app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
     tg_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_input))
 
-    await tg_app.initialize()
-    await tg_app.start()
-    await tg_app.updater.start_polling(drop_pending_updates=True)
-    
-    logger.info("Bot successfully started in polling mode!")
-
-    try:
-        while True:
-            await asyncio.sleep(3600)
-    except (KeyboardInterrupt, SystemExit):
-        await tg_app.updater.stop()
-        await tg_app.stop()
+    logger.info("Bot starting polling...")
+    tg_app.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':
-    flask_thread = threading.Thread(target=run_flask, daemon=True)
-    flask_thread.start()
-
-    asyncio.run(main())
+    main()
