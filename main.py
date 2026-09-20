@@ -18,6 +18,7 @@ from telegram.ext import (
     filters, 
     ContextTypes
 )
+from telegram_bot_calendar import DetailedTelegramCalendar
 
 # Настройка логирования
 logging.basicConfig(
@@ -34,6 +35,13 @@ ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID")
 
 MANAGER_CONTACT = "@ALKUNTR"
 
+CALENDAR_LANGS = {
+    'ua': 'uk',
+    'pl': 'pl',
+    'en': 'en',
+    'ru': 'ru'
+}
+
 def escape_markdown(text) -> str:
     """Безопасное экранирование специальных символов Markdown V1"""
     if text is None or text == "":
@@ -49,7 +57,11 @@ LANGUAGES = {
         'types': ["🚗 Індивідуальний", "👥 Груповий (попутники)"],
         'enter_pickup': "📍 Напишіть **адресу або місце ВІДПРАВЛЕННЯ** (місто, вулиця, вокзал тощо):",
         'enter_dropoff': "🏁 Напишіть **адресу або місце ПРИБУТТЯ**:",
-        'enter_datetime': "📅 Вкажіть **дату та час** поїздки (наприклад, 25.10 о 14:30):",
+        'select_date': "📅 Оберіть **дату поїздки**:",
+        'select_hour': "⏰ Оберіть **годину відправлення**:",
+        'select_minute': "⏱ Оберіть **хвилини**:",
+        'btn_custom_time': "✏️ Ввести дату та час текстом",
+        'enter_datetime_custom': "Введіть дату та час у чат (наприклад, 25.10 о 14:30):",
         'select_passengers': "👥 Вкажіть кількість дорослих пасажирів:",
         'passengers_opts': ["1", "2", "3", "4", "✏️ Свій варіант"],
         'enter_passengers_custom': "Вкажіть кількість пасажирів текстом:",
@@ -90,7 +102,11 @@ LANGUAGES = {
         'types': ["🚗 Indywidualny", "👥 Grupowe (współpasażerowie)"],
         'enter_pickup': "📍 Wpisz **adres/miejsce ODBIORU** (miasto, ulica, dworzec itp.):",
         'enter_dropoff': "🏁 Wpisz **adres/miejsce DOJAZDU**:",
-        'enter_datetime': "📅 Wpisz **datę i godzinę** przejazdu (np. 25.10 o 14:30):",
+        'select_date': "📅 Wybierz **datę przejazdu**:",
+        'select_hour': "⏰ Wybierz **godzinę odjazdu**:",
+        'select_minute': "⏱ Wybierz **minuty**:",
+        'btn_custom_time': "✏️ Wpisz datę i godzinę na czacie",
+        'enter_datetime_custom': "Wpisz datę i godzinę na czacie (np. 25.10 o 14:30):",
         'select_passengers': "👥 Wybierz liczbę dorosłych pasażerów:",
         'passengers_opts': ["1", "2", "3", "4", "✏️ Inna opcja"],
         'enter_passengers_custom': "Wpisz liczbę pasażerów na czacie:",
@@ -131,7 +147,11 @@ LANGUAGES = {
         'types': ["🚗 Private", "👥 Shared"],
         'enter_pickup': "📍 Type your **PICK-UP location/address** (city, street, station, etc.):",
         'enter_dropoff': "🏁 Type your **DROP-OFF location/address**:",
-        'enter_datetime': "📅 Type the **date and time** of your trip (e.g., 25.10 at 14:30):",
+        'select_date': "📅 Select **trip date**:",
+        'select_hour': "⏰ Select **departure hour**:",
+        'select_minute': "⏱ Select **minutes**:",
+        'btn_custom_time': "✏️ Type date & time manually",
+        'enter_datetime_custom': "Type date and time in chat (e.g., 25.10 at 14:30):",
         'select_passengers': "👥 Select number of adult passengers:",
         'passengers_opts': ["1", "2", "3", "4", "✏️ Custom option"],
         'enter_passengers_custom': "Type the number of passengers in chat:",
@@ -172,7 +192,11 @@ LANGUAGES = {
         'types': ["🚗 Индивидуальный", "👥 Групповой (попутчики)"],
         'enter_pickup': "📍 Напишите **адрес или место ОТПРАВЛЕНИЯ** (город, улица, вокзал и т.д.):",
         'enter_dropoff': "🏁 Напишите **адрес или место НАЗНАЧЕНИЯ**:",
-        'enter_datetime': "📅 Напишите **дату и время** поездки (например, 25.10 в 14:30):",
+        'select_date': "📅 Выберите **дату поездки**:",
+        'select_hour': "⏰ Выберите **час отправления**:",
+        'select_minute': "⏱ Выберите **минуты**:",
+        'btn_custom_time': "✏️ Ввести дату и время текстом",
+        'enter_datetime_custom': "Введите дату и время в чат (например, 25.10 в 14:30):",
         'select_passengers': "👥 Укажите количество взрослых пассажиров:",
         'passengers_opts': ["1", "2", "3", "4", "✏️ Свой вариант"],
         'enter_passengers_custom': "Введите количество пассажиров в чат:",
@@ -265,6 +289,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
+    lang = context.user_data.get('lang', 'ua')
     
     if data == "nav_restart":
         await start_command(update, context)
@@ -277,16 +302,33 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await render_step(query, context)
         return
 
-    lang = context.user_data.get('lang', 'ua')
+    # Календарные события
+    if data.startswith("cbcal_"):
+        cal_lang = CALENDAR_LANGS.get(lang, 'en')
+        result, key, step_type = DetailedTelegramCalendar(calendar_id=1, locale=cal_lang).process(data)
+        if not result and key:
+            txt = LANGUAGES[lang]
+            await query.edit_message_text(
+                txt['select_date'],
+                reply_markup=InlineKeyboardMarkup(key.inline_keyboard + [get_nav_buttons(lang)]),
+                parse_mode='Markdown'
+            )
+            return
+        elif result:
+            context.user_data['selected_date'] = result.strftime("%d.%m.%Y")
+            context.user_data['step'] = 'time_hour'
+            await render_step(query, context)
+            return
 
     if data == "nav_back":
         step = context.user_data.get('step')
         steps_order = ['transfer_type', 'pickup', 'dropoff', 'datetime', 'passengers', 'children', 'luggage', 'details', 'phone']
-        if step in steps_order:
+        if step in ['time_hour', 'time_minute']:
+            context.user_data['step'] = 'datetime'
+        elif step in steps_order:
             idx = steps_order.index(step)
             if idx > 0:
-                prev_step = steps_order[idx - 1]
-                context.user_data['step'] = prev_step
+                context.user_data['step'] = steps_order[idx - 1]
             else:
                 await start_command(update, context)
                 return
@@ -298,6 +340,23 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if step == 'transfer_type':
         context.user_data['transfer_type'] = data
         context.user_data['step'] = 'pickup'
+    elif step == 'datetime' and data == "custom_datetime":
+        context.user_data['awaiting_text'] = 'datetime'
+        txt = LANGUAGES[lang]
+        markup = InlineKeyboardMarkup([get_nav_buttons(lang)])
+        await query.edit_message_text(txt['enter_datetime_custom'], reply_markup=markup)
+        return
+    elif step == 'time_hour':
+        if data.startswith("hour_"):
+            hour = data.split("_")[1]
+            context.user_data['temp_hour'] = hour
+            context.user_data['step'] = 'time_minute'
+    elif step == 'time_minute':
+        if data.startswith("min_"):
+            minute = data.split("_")[1]
+            full_dt = f"{context.user_data['selected_date']} {context.user_data['temp_hour']}:{minute}"
+            context.user_data['datetime'] = full_dt
+            context.user_data['step'] = 'passengers'
     elif step == 'passengers':
         if data == "custom_passengers":
             context.user_data['awaiting_text'] = 'passengers'
@@ -396,8 +455,31 @@ async def render_step(query_or_dummy, context: ContextTypes.DEFAULT_TYPE):
         keyboard.append(get_nav_buttons(lang))
         
     elif step == 'datetime':
-        text = txt['enter_datetime']
-        context.user_data['awaiting_text'] = 'datetime'
+        context.user_data['awaiting_text'] = None
+        cal_lang = CALENDAR_LANGS.get(lang, 'en')
+        calendar, step_type = DetailedTelegramCalendar(calendar_id=1, locale=cal_lang).build()
+        text = txt['select_date']
+        calendar_kbd = calendar.inline_keyboard
+        keyboard = calendar_kbd + [[InlineKeyboardButton(txt['btn_custom_time'], callback_data="custom_datetime")]] + [get_nav_buttons(lang)]
+
+    elif step == 'time_hour':
+        context.user_data['awaiting_text'] = None
+        text = f"📅 **{context.user_data['selected_date']}**\n\n{txt['select_hour']}"
+        for h_row in [range(0, 6), range(6, 12), range(12, 18), range(18, 24)]:
+            keyboard.append([InlineKeyboardButton(f"{h:02d}", callback_data=f"hour_{h:02d}") for h in h_row])
+        keyboard.append([InlineKeyboardButton(txt['btn_custom_time'], callback_data="custom_datetime")])
+        keyboard.append(get_nav_buttons(lang))
+
+    elif step == 'time_minute':
+        context.user_data['awaiting_text'] = None
+        text = f"📅 **{context.user_data['selected_date']}** ⏰ **{context.user_data['temp_hour']}:XX**\n\n{txt['select_minute']}"
+        keyboard.append([
+            InlineKeyboardButton("00", callback_data="min_00"),
+            InlineKeyboardButton("15", callback_data="min_15"),
+            InlineKeyboardButton("30", callback_data="min_30"),
+            InlineKeyboardButton("45", callback_data="min_45")
+        ])
+        keyboard.append([InlineKeyboardButton(txt['btn_custom_time'], callback_data="custom_datetime")])
         keyboard.append(get_nav_buttons(lang))
         
     elif step == 'passengers':
