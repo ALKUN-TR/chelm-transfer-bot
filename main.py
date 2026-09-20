@@ -1,5 +1,7 @@
 import os
 import logging
+import asyncio
+import threading
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
@@ -13,10 +15,10 @@ app = Flask(__name__)
 
 # Конфигурация из переменных окружения
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID")  # Ваш Telegram ID
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")      # Например: https://chelm-transfer-bot.onrender.com
+ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-# Мультиязычные тексты и элементы UI
+# Мультиязычные тексты
 LANGUAGES = {
     'ua': {
         'welcome': "Вітаємо! Оберіть напрямок поїздки:",
@@ -126,8 +128,7 @@ LANGUAGES = {
 
 # Инициализация Telegram приложения
 tg_app = Application.builder().token(BOT_TOKEN).build()
-
-# --- Вспомогательные функции ---
+loop = asyncio.new_event_loop()
 
 def get_nav_buttons(lang_code, show_back=True):
     txt = LANGUAGES[lang_code]
@@ -137,17 +138,14 @@ def get_nav_buttons(lang_code, show_back=True):
     row.append(InlineKeyboardButton(txt['btn_restart'], callback_data="nav_restart"))
     return row
 
-async def safe_delete_user_msg(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int):
+async def safe_delete_user_msg(context, chat_id, message_id):
     try:
         await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
     except Exception:
         pass
 
-# --- Обработчики команд и Inline-кнопок ---
-
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
-    
     keyboard = [
         [InlineKeyboardButton("🇺🇦 Українська", callback_data="lang_ua"),
          InlineKeyboardButton("🇵🇱 Polski", callback_data="lang_pl")],
@@ -155,7 +153,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
          InlineKeyboardButton("🇷🇺 Русский", callback_data="lang_ru")]
     ]
     markup = InlineKeyboardMarkup(keyboard)
-    
     text = " Please select your language / Оберіть мову:"
     
     if update.callback_query:
@@ -170,12 +167,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     data = query.data
     
-    # Навигация "Начать сначала"
     if data == "nav_restart":
         await start_command(update, context)
         return
 
-    # Выбор языка
     if data.startswith("lang_"):
         lang = data.split("_")[1]
         context.user_data['lang'] = lang
@@ -185,7 +180,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     lang = context.user_data.get('lang', 'ua')
 
-    # Навигация "Назад"
     if data == "nav_back":
         step = context.user_data.get('step')
         steps_order = ['route', 'date', 'time', 'passengers', 'luggage', 'address', 'phone']
@@ -199,7 +193,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await render_step(query, context)
         return
 
-    # Обработка выбора шагов
     step = context.user_data.get('step')
     
     if step == 'route':
@@ -254,7 +247,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         txt = LANGUAGES[lang]
         await query.edit_message_text(txt['cancelled'])
         
-        # Уведомление админу об отмене
         if ADMIN_CHAT_ID:
             user = update.effective_user
             cancel_msg = (
@@ -269,7 +261,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await render_step(query, context)
 
-# Отображение шагов в центральной карточке
 async def render_step(query, context: ContextTypes.DEFAULT_TYPE):
     lang = context.user_data.get('lang', 'ua')
     txt = LANGUAGES[lang]
@@ -311,7 +302,6 @@ async def render_step(query, context: ContextTypes.DEFAULT_TYPE):
         
     elif step == 'phone':
         text = txt['share_phone']
-        # Показываем нижнюю клавиатуру для отправки контактов
         reply_markup = ReplyKeyboardMarkup(
             [[KeyboardButton(txt['btn_phone'], request_contact=True)]],
             resize_keyboard=True,
@@ -323,7 +313,6 @@ async def render_step(query, context: ContextTypes.DEFAULT_TYPE):
     markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(text=text, reply_markup=markup)
 
-# Обработка пользовательского текста (Удаление сообщений для чистоты чата)
 async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await safe_delete_user_msg(context, update.effective_chat.id, update.message.message_id)
     
@@ -346,7 +335,6 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     context.user_data['awaiting_text'] = None
     
-    # Обновляем центральную карточку
     class DummyQuery:
         def __init__(self, msg):
             self.message = msg
@@ -361,7 +349,6 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     dummy_msg = type('Msg', (), {'chat_id': update.effective_chat.id, 'message_id': card_msg_id})()
     await render_step(DummyQuery(dummy_msg), context)
 
-# Обработка полученного контакта и отправка заявки
 async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await safe_delete_user_msg(context, update.effective_chat.id, update.message.message_id)
     
@@ -371,11 +358,9 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = context.user_data.get('lang', 'ua')
     txt = LANGUAGES[lang]
 
-    # Убираем нижнюю клавиатуру контакта
     hide_kb = await update.message.reply_text(".", reply_markup=ReplyKeyboardRemove())
     await safe_delete_user_msg(context, update.effective_chat.id, hide_kb.message_id)
 
-    # Сообщение администратору
     if ADMIN_CHAT_ID:
         user = update.effective_user
         order_msg = (
@@ -391,7 +376,6 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=order_msg, parse_mode='Markdown')
 
-    # Обновление центрального сообщения с кнопками управления
     card_msg_id = context.user_data.get('card_msg_id')
     keyboard = [
         [InlineKeyboardButton(txt['btn_new_order'], callback_data="nav_restart")],
@@ -407,33 +391,36 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=markup
         )
 
-# Регистрируем обработчики Telegram
+# Регистрация обработчиков
 tg_app.add_handler(CommandHandler("start", start_command))
 tg_app.add_handler(CallbackQueryHandler(handle_callback))
 tg_app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
 tg_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_input))
 
-# --- Flask роуты ---
-
+# Маршруты Flask
 @app.route('/', methods=['GET'])
 def index():
-    return "Chelm Transfer Bot is running 24/7!", 200
+    return "Chelm Transfer Bot is Running", 200
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
     if request.method == "POST":
         update = Update.de_json(request.get_json(force=True), tg_app.bot)
-        tg_app.update_queue.put_nowait(update)
+        asyncio.run_coroutine_threadsafe(tg_app.process_update(update), loop)
         return "ok", 200
 
+def run_bot():
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(tg_app.initialize())
+    loop.run_until_complete(tg_app.start())
+    if WEBHOOK_URL:
+        url = f"{WEBHOOK_URL.rstrip('/')}/webhook"
+        loop.run_until_complete(tg_app.bot.set_webhook(url=url))
+    loop.run_forever()
+
+# Запуск фонового потока для бота
+threading.Thread(target=run_bot, daemon=True).start()
+
 if __name__ == '__main__':
-    # Автоматическая установка Webhook при запуске
-    import asyncio
-    async def init_webhook():
-        if WEBHOOK_URL:
-            url = f"{WEBHOOK_URL.rstrip('/')}/webhook"
-            await tg_app.bot.set_webhook(url=url)
-            logger.info(f"Webhook set to {url}")
-            
-    asyncio.run(init_webhook())
-    tg_app.run_polling()
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
