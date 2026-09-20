@@ -27,7 +27,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Инициализация Flask для поддержания работоспособности на Render
+# Инициализация Flask для поддержания работы на Render
 app = Flask(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -37,6 +37,8 @@ LANGUAGES = {
     'ua': {
         'welcome': "Вітаємо! Оберіть напрямок поїздки:",
         'routes': ["Хелм ➔ Польща", "Польща ➔ Хелм", "🚘 Інший маршрут"],
+        'select_type': "Оберіть тип трансферу:",
+        'types': ["🚗 Індивідуальний трансфер", "👥 З попутниками (помісно)", "🤷 Не має значення"],
         'select_date': "Оберіть дату поїздки:",
         'dates': ["Сьогодні", "Завтра", "📅 Інша дата"],
         'enter_date': "Будь ласка, напишіть дату поїздки у чат (наприклад, 25.10):",
@@ -49,8 +51,11 @@ LANGUAGES = {
         'enter_luggage': "Опишіть ваш багаж у чат:",
         'enter_pickup': "Введіть точну адресу або місце ПОСАДКИ у чат:",
         'enter_dropoff': "Введіть точну адресу або місце ВЫСАДКИ у чат:",
+        'select_comm': "Як з вами краще зв'язатися?",
+        'comms': ["💬 Telegram", "🟢 WhatsApp", "📞 Дзвінок"],
         'share_phone': "📱 Натисніть кнопку нижче, щоб передати номер телефону:",
         'btn_phone': "📱 Поділитися номером телефону",
+        'summary_title': "📋 **Перевірте дані вашої заявки:**",
         'success': "✅ Дякуємо! Вашу заявку прийнято. Менеджер зв'яжеться з вами найближчим часом.",
         'cancelled': "❌ Вашу заявку скасовано.",
         'btn_back': "⬅️ Назад",
@@ -64,6 +69,8 @@ LANGUAGES = {
     'pl': {
         'welcome': "Witamy! Wybierz kierunek jazdy:",
         'routes': ["Chełm ➔ Polska", "Polska ➔ Chełm", "🚘 Inna trasa"],
+        'select_type': "Wybierz typ transferu:",
+        'types': ["🚗 Transfer indywidualny", "👥 Z współpasażerami", "🤷 Bez znaczenia"],
         'select_date': "Wybierz datę przejazdu:",
         'dates': ["Dzisiaj", "Jutro", "📅 Inna data"],
         'enter_date': "Proszę wpisać datę przejazdu na czacie (np. 25.10):",
@@ -76,8 +83,11 @@ LANGUAGES = {
         'enter_luggage': "Opisz swój bagaż na czacie:",
         'enter_pickup': "Wpisz dokładny adres/miejsce ODBIORU na czacie:",
         'enter_dropoff': "Wpisz dokładny adres/miejsce DOJAZDU na czacie:",
+        'select_comm': "Jak najlepiej się z Tobą skontaktować?",
+        'comms': ["💬 Telegram", "🟢 WhatsApp", "📞 Połączenie telefoniczne"],
         'share_phone': "📱 Kliknij przycisk poniżej, aby udostępnić numer:",
         'btn_phone': "📱 Udostępnij numer telefonu",
+        'summary_title': "📋 **Sprawdź szczegóły zamówienia:**",
         'success': "✅ Dziękujemy! Zgłoszenie zostało przyjęte. Menedżer skontaktuje się z Tobą.",
         'cancelled': "❌ Twoje zgłoszenie zostało anulowane.",
         'btn_back': "⬅️ Wstecz",
@@ -91,6 +101,8 @@ LANGUAGES = {
     'en': {
         'welcome': "Welcome! Select your route:",
         'routes': ["Chełm ➔ Poland", "Poland ➔ Chełm", "🚘 Custom route"],
+        'select_type': "Select transfer type:",
+        'types': ["🚗 Private transfer", "👥 Shared transfer", "🤷 No preference"],
         'select_date': "Select date of trip:",
         'dates': ["Today", "Tomorrow", "📅 Other date"],
         'enter_date': "Please type the date in chat (e.g., 25.10):",
@@ -103,8 +115,11 @@ LANGUAGES = {
         'enter_luggage': "Describe your luggage in chat:",
         'enter_pickup': "Type exact PICK-UP address or location in chat:",
         'enter_dropoff': "Type exact DROP-OFF address or location in chat:",
+        'select_comm': "How should we contact you?",
+        'comms': ["💬 Telegram", "🟢 WhatsApp", "📞 Phone call"],
         'share_phone': "📱 Press the button below to share your phone number:",
         'btn_phone': "📱 Share phone number",
+        'summary_title': "📋 **Please review your booking:**",
         'success': "✅ Thank you! Your booking is received. Manager will contact you shortly.",
         'cancelled': "❌ Your booking has been cancelled.",
         'btn_back': "⬅️ Back",
@@ -118,6 +133,8 @@ LANGUAGES = {
     'ru': {
         'welcome': "Добро пожаловать! Выберите направление поездки:",
         'routes': ["Хелм ➔ Польша", "Польша ➔ Хелм", "🚘 Другой маршрут"],
+        'select_type': "Выберите тип трансфера:",
+        'types': ["🚗 Индивидуальный трансфер", "👥 С попутчиками (поместно)", "🤷 Без разницы"],
         'select_date': "Выберите дату поездки:",
         'dates': ["Сегодня", "Завтра", "📅 Другая дата"],
         'enter_date': "Пожалуйста, напишите дату поездки в чат (например, 25.10):",
@@ -130,8 +147,11 @@ LANGUAGES = {
         'enter_luggage': "Опишите ваш багаж в чат:",
         'enter_pickup': "Введите точный адрес или место ПОСАДКИ в чат:",
         'enter_dropoff': "Введите точный адрес или место ВЫСАДКИ в чат:",
+        'select_comm': "Как с вами лучше связаться?",
+        'comms': ["💬 Telegram", "🟢 WhatsApp", "📞 Звонок"],
         'share_phone': "📱 Нажмите кнопку внизу, чтобы передать номер телефона:",
         'btn_phone': "📱 Поделиться номером телефона",
+        'summary_title': "📋 **Проверьте данные вашей заявки:**",
         'success': "✅ Спасибо! Ваша заявка принята. Менеджер свяжется с вами в ближайшее время.",
         'cancelled': "❌ Ваша заявка отменена.",
         'btn_back': "⬅️ Назад",
@@ -151,6 +171,24 @@ def get_nav_buttons(lang_code, show_back=True):
         row.append(InlineKeyboardButton(txt['btn_back'], callback_data="nav_back"))
     row.append(InlineKeyboardButton(txt['btn_restart'], callback_data="nav_restart"))
     return row
+
+def build_summary_text(context_data, lang_code):
+    txt = LANGUAGES[lang_code]
+    summary = (
+        f"{txt['summary_title']}\n\n"
+        f"🛣 **Маршрут / Route:** {context_data.get('route', '-')}\n"
+        f"🚘 **Тип трансфера / Type:** {context_data.get('transfer_type', '-')}\n"
+        f"📅 **Дата / Date:** {context_data.get('date', '-')}\n"
+        f"⏰ **Время / Time:** {context_data.get('time', '-')}\n"
+        f"👥 **Пассажиры / Passengers:** {context_data.get('passengers', '-')}\n"
+        f"🧳 **Багаж / Luggage:** {context_data.get('luggage', '-')}\n"
+        f"📍 **Посадка / Pickup:** {context_data.get('pickup', '-')}\n"
+        f"🏁 **Высадка / Dropoff:** {context_data.get('dropoff', '-')}\n"
+        f"💬 **Связь / Contact via:** {context_data.get('comm_channel', '-')}\n"
+        f"📞 **Телефон / Phone:** `{context_data.get('phone', '-')}`\n\n"
+        f"{txt['success']}"
+    )
+    return summary
 
 async def safe_delete_user_msg(context, chat_id, message_id):
     try:
@@ -197,7 +235,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "nav_back":
         step = context.user_data.get('step')
-        steps_order = ['route', 'date', 'time', 'passengers', 'luggage', 'pickup', 'dropoff', 'phone']
+        steps_order = ['route', 'transfer_type', 'date', 'time', 'passengers', 'luggage', 'pickup', 'dropoff', 'comm_channel', 'phone']
         if step in steps_order:
             idx = steps_order.index(step)
             if idx > 0:
@@ -213,6 +251,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if step == 'route':
         context.user_data['route'] = data
+        context.user_data['step'] = 'transfer_type'
+    elif step == 'transfer_type':
+        context.user_data['transfer_type'] = data
         context.user_data['step'] = 'date'
     elif step == 'date':
         if data == "custom_date":
@@ -241,6 +282,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         context.user_data['luggage'] = data
         context.user_data['step'] = 'pickup'
+    elif step == 'comm_channel':
+        context.user_data['comm_channel'] = data
+        context.user_data['step'] = 'phone'
     elif data == "ask_cancel":
         txt = LANGUAGES[lang]
         keyboard = [
@@ -250,12 +294,13 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(txt['confirm_cancel'], reply_markup=InlineKeyboardMarkup(keyboard))
         return
     elif data == "keep_order":
+        summary_text = build_summary_text(context.user_data, lang)
         txt = LANGUAGES[lang]
         keyboard = [
             [InlineKeyboardButton(txt['btn_new_order'], callback_data="nav_restart")],
             [InlineKeyboardButton(txt['btn_cancel_order'], callback_data="ask_cancel")]
         ]
-        await query.edit_message_text(txt['success'], reply_markup=InlineKeyboardMarkup(keyboard))
+        await query.edit_message_text(summary_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
         return
     elif data == "confirm_cancel":
         txt = LANGUAGES[lang]
@@ -291,6 +336,13 @@ async def render_step(query_or_dummy, context: ContextTypes.DEFAULT_TYPE):
         for r in txt['routes']:
             keyboard.append([InlineKeyboardButton(r, callback_data=r)])
         keyboard.append(get_nav_buttons(lang, show_back=False))
+        
+    elif step == 'transfer_type':
+        context.user_data['awaiting_text'] = None
+        text = txt['select_type']
+        for t in txt['types']:
+            keyboard.append([InlineKeyboardButton(t, callback_data=t)])
+        keyboard.append(get_nav_buttons(lang))
         
     elif step == 'date':
         context.user_data['awaiting_text'] = None
@@ -333,6 +385,13 @@ async def render_step(query_or_dummy, context: ContextTypes.DEFAULT_TYPE):
     elif step == 'dropoff':
         text = txt['enter_dropoff']
         context.user_data['awaiting_text'] = 'dropoff'
+        keyboard.append(get_nav_buttons(lang))
+
+    elif step == 'comm_channel':
+        context.user_data['awaiting_text'] = None
+        text = txt['select_comm']
+        for c in txt['comms']:
+            keyboard.append([InlineKeyboardButton(c, callback_data=c)])
         keyboard.append(get_nav_buttons(lang))
         
     elif step == 'phone':
@@ -386,7 +445,7 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['step'] = 'dropoff'
     elif awaiting == 'dropoff':
         context.user_data['dropoff'] = user_text
-        context.user_data['step'] = 'phone'
+        context.user_data['step'] = 'comm_channel'
         
     class DummyQuery:
         def __init__(self, chat_id, msg_id):
@@ -418,13 +477,15 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"📥 **НОВАЯ ЗАЯВКА НА ТРАНСФЕР!**\n\n"
             f"👤 **Пассажир:** {user.full_name} (@{user.username or 'нет'})\n"
             f"📞 **Телефон:** `{phone}`\n"
+            f"🚘 **Тип поездки:** {context.user_data.get('transfer_type', 'Не указан')}\n"
             f"🛣 **Маршрут:** {context.user_data.get('route', 'Не указан')}\n"
             f"📅 **Дата:** {context.user_data.get('date', 'Не указана')}\n"
             f"⏰ **Время:** {context.user_data.get('time', 'Не указано')}\n"
             f"👥 **Пассажиры:** {context.user_data.get('passengers', 'Не указано')}\n"
             f"🧳 **Багаж:** {context.user_data.get('luggage', 'Не указан')}\n"
             f"📍 **Место посадки:** {context.user_data.get('pickup', 'Не указано')}\n"
-            f"🏁 **Место высадки:** {context.user_data.get('dropoff', 'Не указано')}"
+            f"🏁 **Место высадки:** {context.user_data.get('dropoff', 'Не указано')}\n"
+            f"💬 **Предпочтительный канал:** {context.user_data.get('comm_channel', 'Не указан')}"
         )
         try:
             await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=order_msg, parse_mode='Markdown')
@@ -438,18 +499,20 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     markup = InlineKeyboardMarkup(keyboard)
     
+    summary_text = build_summary_text(context.user_data, lang)
+
     if card_msg_id:
         try:
             await context.bot.edit_message_text(
                 chat_id=update.effective_chat.id,
                 message_id=card_msg_id,
-                text=txt['success'],
-                reply_markup=markup
+                text=summary_text,
+                reply_markup=markup,
+                parse_mode='Markdown'
             )
         except Exception as e:
             logger.error(f"Error updating card message: {e}")
             
-    # Чистое удаление нижней Reply-клавиатуры вместе с отправкой подтверждения
     await update.message.reply_text(
         txt['success'], 
         reply_markup=ReplyKeyboardRemove()
