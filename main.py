@@ -284,7 +284,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = await update.message.reply_text(text=text, reply_markup=markup)
         context.user_data['card_msg_id'] = msg.message_id
 
-async def render_step(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
+async def render_step(chat_id: int, context: ContextTypes.DEFAULT_TYPE, force_new_msg: bool = False):
     lang = context.user_data.get('lang', 'ua')
     txt = LANGUAGES[lang]
     step = context.user_data.get('step', 'transfer_type')
@@ -310,7 +310,21 @@ async def render_step(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         cal_lang = CALENDAR_LANGS.get(lang, 'en')
         calendar, step_type = DetailedTelegramCalendar(calendar_id=1, locale=cal_lang).build()
         text = txt['select_date']
-        keyboard = calendar.inline_keyboard + [[InlineKeyboardButton(txt['btn_custom_time'], callback_data="custom_datetime")]] + [get_nav_buttons(lang)]
+        
+        # Корректная сборка Inline-клавиатуры для библиотеки telegram-bot-calendar
+        raw_kb = list(calendar.inline_keyboard)
+        raw_kb.append([InlineKeyboardButton(txt['btn_custom_time'], callback_data="custom_datetime")])
+        raw_kb.append(get_nav_buttons(lang))
+        
+        markup = InlineKeyboardMarkup(raw_kb)
+        
+        # Удаляем старую карточку при переходе к календарю
+        if card_msg_id:
+            await safe_delete_user_msg(context, chat_id, card_msg_id)
+
+        msg = await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=markup, parse_mode='Markdown')
+        context.user_data['card_msg_id'] = msg.message_id
+        return
 
     elif step == 'time_hour':
         text = f"📅 **{context.user_data.get('selected_date', '')}**\n\n{txt['select_hour']}"
@@ -386,9 +400,13 @@ async def render_step(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
 
     markup = InlineKeyboardMarkup(keyboard)
 
-    # Гарантированное обновление карточки меню
-    try:
+    if force_new_msg or not card_msg_id:
         if card_msg_id:
+            await safe_delete_user_msg(context, chat_id, card_msg_id)
+        msg = await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=markup, parse_mode='Markdown')
+        context.user_data['card_msg_id'] = msg.message_id
+    else:
+        try:
             await context.bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=card_msg_id,
@@ -396,13 +414,10 @@ async def render_step(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=markup,
                 parse_mode='Markdown'
             )
-        else:
+        except Exception as e:
+            logger.error(f"Render step error: {e}")
             msg = await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=markup, parse_mode='Markdown')
             context.user_data['card_msg_id'] = msg.message_id
-    except Exception as e:
-        logger.error(f"Render step error: {e}")
-        msg = await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=markup, parse_mode='Markdown')
-        context.user_data['card_msg_id'] = msg.message_id
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -427,9 +442,13 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         result, key, step_type = DetailedTelegramCalendar(calendar_id=1, locale=cal_lang).process(data)
         if not result and key:
             txt = LANGUAGES[lang]
+            raw_kb = list(key.inline_keyboard)
+            raw_kb.append([InlineKeyboardButton(txt['btn_custom_time'], callback_data="custom_datetime")])
+            raw_kb.append(get_nav_buttons(lang))
+            
             await query.edit_message_text(
                 txt['select_date'],
-                reply_markup=InlineKeyboardMarkup(key.inline_keyboard + [[InlineKeyboardButton(txt['btn_custom_time'], callback_data="custom_datetime")]] + [get_nav_buttons(lang)]),
+                reply_markup=InlineKeyboardMarkup(raw_kb),
                 parse_mode='Markdown'
             )
             return
@@ -574,7 +593,7 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     step = context.user_data.get('step')
 
-    # Асинхронно удаляем только само текстовое сообщение пользователя
+    # Удаляем текстовый ввод пользователя для чистоты интерфейса
     asyncio.create_task(safe_delete_user_msg(context, chat_id, user_msg_id))
     
     if not step:
@@ -583,30 +602,32 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if step == 'pickup':
         context.user_data['pickup'] = user_text
         context.user_data['step'] = 'dropoff'
+        await render_step(chat_id, context)
     elif step == 'dropoff':
         context.user_data['dropoff'] = user_text
-        # КЛЮЧЕВОЙ ПЕРЕХОД К КАЛЕНДАРЮ
+        # ПЕРЕХОД К КАЛЕНДАРЮ: Явно переключаем шаг
         context.user_data['step'] = 'datetime'
+        await render_step(chat_id, context, force_new_msg=True)
     elif step == 'custom_datetime':
         context.user_data['datetime'] = user_text
         context.user_data['step'] = 'passengers'
+        await render_step(chat_id, context, force_new_msg=True)
     elif step == 'custom_passengers':
         context.user_data['passengers'] = user_text
         context.user_data['step'] = 'children'
+        await render_step(chat_id, context, force_new_msg=True)
     elif step == 'custom_children':
         context.user_data['children'] = user_text
         context.user_data['step'] = 'luggage'
+        await render_step(chat_id, context, force_new_msg=True)
     elif step == 'custom_luggage':
         context.user_data['luggage'] = user_text
         context.user_data['step'] = 'details'
+        await render_step(chat_id, context, force_new_msg=True)
     elif step == 'details':
         context.user_data['details'] = user_text
         context.user_data['step'] = 'phone'
-    else:
-        return
-
-    # Перерисовываем карточку с календарем
-    await render_step(chat_id, context)
+        await render_step(chat_id, context, force_new_msg=True)
 
 async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
