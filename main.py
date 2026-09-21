@@ -260,8 +260,8 @@ def build_summary_text(context_data, lang_code):
 async def safe_delete_user_msg(context, chat_id, message_id):
     try:
         await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
-    except Exception as e:
-        logger.debug(f"Failed to delete message {message_id}: {e}")
+    except Exception:
+        pass
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
@@ -289,9 +289,6 @@ async def render_step(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     txt = LANGUAGES[lang]
     step = context.user_data.get('step', 'transfer_type')
     card_msg_id = context.user_data.get('card_msg_id')
-
-    if not card_msg_id:
-        return
 
     keyboard = []
 
@@ -372,10 +369,11 @@ async def render_step(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         text = txt['share_phone']
         keyboard.append(get_nav_buttons(lang))
         markup = InlineKeyboardMarkup(keyboard)
-        try:
-            await context.bot.edit_message_text(chat_id=chat_id, message_id=card_msg_id, text=text, reply_markup=markup, parse_mode='Markdown')
-        except Exception as e:
-            logger.error(f"Error editing phone step card: {e}")
+        if card_msg_id:
+            try:
+                await context.bot.edit_message_text(chat_id=chat_id, message_id=card_msg_id, text=text, reply_markup=markup, parse_mode='Markdown')
+            except Exception:
+                pass
 
         reply_markup = ReplyKeyboardMarkup(
             [[KeyboardButton(txt['btn_phone'], request_contact=True)]],
@@ -387,16 +385,24 @@ async def render_step(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         return
 
     markup = InlineKeyboardMarkup(keyboard)
+
+    # Гарантированное обновление карточки меню
     try:
-        await context.bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=card_msg_id,
-            text=text,
-            reply_markup=markup,
-            parse_mode='Markdown'
-        )
+        if card_msg_id:
+            await context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=card_msg_id,
+                text=text,
+                reply_markup=markup,
+                parse_mode='Markdown'
+            )
+        else:
+            msg = await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=markup, parse_mode='Markdown')
+            context.user_data['card_msg_id'] = msg.message_id
     except Exception as e:
         logger.error(f"Render step error: {e}")
+        msg = await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=markup, parse_mode='Markdown')
+        context.user_data['card_msg_id'] = msg.message_id
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -423,7 +429,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             txt = LANGUAGES[lang]
             await query.edit_message_text(
                 txt['select_date'],
-                reply_markup=InlineKeyboardMarkup(key.inline_keyboard + [get_nav_buttons(lang)]),
+                reply_markup=InlineKeyboardMarkup(key.inline_keyboard + [[InlineKeyboardButton(txt['btn_custom_time'], callback_data="custom_datetime")]] + [get_nav_buttons(lang)]),
                 parse_mode='Markdown'
             )
             return
@@ -555,8 +561,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             try:
                 await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=cancel_msg, parse_mode='Markdown')
-            except Exception as e:
-                logger.error(f"Error sending cancellation to admin: {e}")
+            except Exception:
+                pass
         return
 
     await render_step(chat_id, context)
@@ -566,13 +572,12 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_msg_id = update.message.message_id
     user_text = update.message.text
     
-    card_msg_id = context.user_data.get('card_msg_id')
     step = context.user_data.get('step')
 
-    # Фоновое асинхронное удаление входящего сообщения
+    # Асинхронно удаляем только само текстовое сообщение пользователя
     asyncio.create_task(safe_delete_user_msg(context, chat_id, user_msg_id))
     
-    if not card_msg_id or not step:
+    if not step:
         return
         
     if step == 'pickup':
@@ -580,6 +585,7 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['step'] = 'dropoff'
     elif step == 'dropoff':
         context.user_data['dropoff'] = user_text
+        # КЛЮЧЕВОЙ ПЕРЕХОД К КАЛЕНДАРЮ
         context.user_data['step'] = 'datetime'
     elif step == 'custom_datetime':
         context.user_data['datetime'] = user_text
@@ -599,6 +605,7 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         return
 
+    # Перерисовываем карточку с календарем
     await render_step(chat_id, context)
 
 async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
