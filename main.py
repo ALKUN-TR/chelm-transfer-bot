@@ -340,6 +340,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if step == 'transfer_type':
         context.user_data['transfer_type'] = data
         context.user_data['step'] = 'pickup'
+        context.user_data['awaiting_text'] = 'pickup'
     elif step == 'datetime' and data == "custom_datetime":
         context.user_data['awaiting_text'] = 'datetime'
         txt = LANGUAGES[lang]
@@ -385,6 +386,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         context.user_data['luggage'] = data
         context.user_data['step'] = 'details'
+        context.user_data['awaiting_text'] = 'details'
     elif step == 'details':
         if data == "skip_details":
             context.user_data['details'] = "-"
@@ -438,7 +440,6 @@ async def render_step(query_or_dummy, context: ContextTypes.DEFAULT_TYPE):
     keyboard = []
     
     if step == 'transfer_type':
-        context.user_data['awaiting_text'] = None
         text = txt['select_type']
         for t in txt['types']:
             keyboard.append([InlineKeyboardButton(t, callback_data=t)])
@@ -446,16 +447,13 @@ async def render_step(query_or_dummy, context: ContextTypes.DEFAULT_TYPE):
 
     elif step == 'pickup':
         text = txt['enter_pickup']
-        context.user_data['awaiting_text'] = 'pickup'
         keyboard.append(get_nav_buttons(lang))
 
     elif step == 'dropoff':
         text = txt['enter_dropoff']
-        context.user_data['awaiting_text'] = 'dropoff'
         keyboard.append(get_nav_buttons(lang))
         
     elif step == 'datetime':
-        context.user_data['awaiting_text'] = None
         cal_lang = CALENDAR_LANGS.get(lang, 'en')
         calendar, step_type = DetailedTelegramCalendar(calendar_id=1, locale=cal_lang).build()
         text = txt['select_date']
@@ -463,7 +461,6 @@ async def render_step(query_or_dummy, context: ContextTypes.DEFAULT_TYPE):
         keyboard = calendar_kbd + [[InlineKeyboardButton(txt['btn_custom_time'], callback_data="custom_datetime")]] + [get_nav_buttons(lang)]
 
     elif step == 'time_hour':
-        context.user_data['awaiting_text'] = None
         text = f"📅 **{context.user_data['selected_date']}**\n\n{txt['select_hour']}"
         for h_row in [range(0, 6), range(6, 12), range(12, 18), range(18, 24)]:
             keyboard.append([InlineKeyboardButton(f"{h:02d}", callback_data=f"hour_{h:02d}") for h in h_row])
@@ -471,7 +468,6 @@ async def render_step(query_or_dummy, context: ContextTypes.DEFAULT_TYPE):
         keyboard.append(get_nav_buttons(lang))
 
     elif step == 'time_minute':
-        context.user_data['awaiting_text'] = None
         text = f"📅 **{context.user_data['selected_date']}** ⏰ **{context.user_data['temp_hour']}:XX**\n\n{txt['select_minute']}"
         keyboard.append([
             InlineKeyboardButton("00", callback_data="min_00"),
@@ -483,7 +479,6 @@ async def render_step(query_or_dummy, context: ContextTypes.DEFAULT_TYPE):
         keyboard.append(get_nav_buttons(lang))
         
     elif step == 'passengers':
-        context.user_data['awaiting_text'] = None
         text = txt['select_passengers']
         opts = txt['passengers_opts']
         keyboard.append([
@@ -496,14 +491,12 @@ async def render_step(query_or_dummy, context: ContextTypes.DEFAULT_TYPE):
         keyboard.append(get_nav_buttons(lang))
 
     elif step == 'children':
-        context.user_data['awaiting_text'] = None
         text = txt['ask_children']
         keyboard.append([InlineKeyboardButton(txt['btn_yes_children'], callback_data="has_children"),
                          InlineKeyboardButton(txt['btn_no_children'], callback_data="no_children")])
         keyboard.append(get_nav_buttons(lang))
 
     elif step == 'luggage':
-        context.user_data['awaiting_text'] = None
         text = txt['select_luggage']
         opts = txt['luggage_opts']
         keyboard.append([
@@ -517,12 +510,10 @@ async def render_step(query_or_dummy, context: ContextTypes.DEFAULT_TYPE):
 
     elif step == 'details':
         text = txt['enter_details']
-        context.user_data['awaiting_text'] = 'details'
         keyboard.append([InlineKeyboardButton(txt['btn_skip_details'], callback_data="skip_details")])
         keyboard.append(get_nav_buttons(lang))
 
     elif step == 'phone':
-        context.user_data['awaiting_text'] = None
         text = txt['share_phone']
         keyboard.append(get_nav_buttons(lang))
         markup = InlineKeyboardMarkup(keyboard)
@@ -557,12 +548,13 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not awaiting or not card_msg_id:
         return
         
-    # Явно сбрасываем состояние ожидания перед обновлением шага
+    # Сбрасываем флаг сразу при получении
     context.user_data['awaiting_text'] = None
         
     if awaiting == 'pickup':
         context.user_data['pickup'] = user_text
         context.user_data['step'] = 'dropoff'
+        context.user_data['awaiting_text'] = 'dropoff'
     elif awaiting == 'dropoff':
         context.user_data['dropoff'] = user_text
         context.user_data['step'] = 'datetime'
@@ -578,6 +570,7 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif awaiting == 'luggage':
         context.user_data['luggage'] = user_text
         context.user_data['step'] = 'details'
+        context.user_data['awaiting_text'] = 'details'
     elif awaiting == 'details':
         context.user_data['details'] = user_text
         context.user_data['step'] = 'phone'
