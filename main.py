@@ -20,19 +20,16 @@ from telegram.ext import (
 )
 from telegram_bot_calendar import DetailedTelegramCalendar
 
-# Настройка логирования
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", 
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# Инициализация Flask для Render
 app = Flask(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID")
-
 MANAGER_CONTACT = "@ALKUNTR"
 
 CALENDAR_LANGS = {
@@ -43,11 +40,11 @@ CALENDAR_LANGS = {
 }
 
 def escape_markdown(text) -> str:
-    """Безопасное экранирование специальных символов Markdown V1"""
     if text is None or text == "":
         return "-"
     text_str = str(text)
-    for char in ['_', '*', '`', '[']:
+    # Исправлено безопасное экранирование Markdown V1
+    for char in ['_', '*', '`', '[', ']', '(', ')']:
         text_str = text_str.replace(char, f'\\{char}')
     return text_str
 
@@ -268,6 +265,7 @@ async def safe_delete_user_msg(context, chat_id, message_id):
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
+    chat_id = update.effective_chat.id
     
     keyboard = [
         [InlineKeyboardButton("🇺🇦 Українська", callback_data="lang_ua"),
@@ -280,17 +278,133 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if update.callback_query:
         await update.callback_query.answer()
-        await update.callback_query.edit_message_text(text=text, reply_markup=markup)
+        msg = await update.callback_query.edit_message_text(text=text, reply_markup=markup)
+        context.user_data['card_msg_id'] = msg.message_id
     else:
         msg = await update.message.reply_text(text=text, reply_markup=markup)
         context.user_data['card_msg_id'] = msg.message_id
+
+async def render_step(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
+    lang = context.user_data.get('lang', 'ua')
+    txt = LANGUAGES[lang]
+    step = context.user_data.get('step', 'transfer_type')
+    card_msg_id = context.user_data.get('card_msg_id')
+
+    if not card_msg_id:
+        return
+
+    keyboard = []
+
+    if step == 'transfer_type':
+        text = txt['select_type']
+        for t in txt['types']:
+            keyboard.append([InlineKeyboardButton(t, callback_data=t)])
+        keyboard.append(get_nav_buttons(lang, show_back=False))
+
+    elif step == 'pickup':
+        text = txt['enter_pickup']
+        keyboard.append(get_nav_buttons(lang))
+
+    elif step == 'dropoff':
+        text = txt['enter_dropoff']
+        keyboard.append(get_nav_buttons(lang))
+
+    elif step == 'datetime':
+        cal_lang = CALENDAR_LANGS.get(lang, 'en')
+        calendar, step_type = DetailedTelegramCalendar(calendar_id=1, locale=cal_lang).build()
+        text = txt['select_date']
+        keyboard = calendar.inline_keyboard + [[InlineKeyboardButton(txt['btn_custom_time'], callback_data="custom_datetime")]] + [get_nav_buttons(lang)]
+
+    elif step == 'time_hour':
+        text = f"📅 **{context.user_data.get('selected_date', '')}**\n\n{txt['select_hour']}"
+        for h_row in [range(0, 6), range(6, 12), range(12, 18), range(18, 24)]:
+            keyboard.append([InlineKeyboardButton(f"{h:02d}", callback_data=f"hour_{h:02d}") for h in h_row])
+        keyboard.append([InlineKeyboardButton(txt['btn_custom_time'], callback_data="custom_datetime")])
+        keyboard.append(get_nav_buttons(lang))
+
+    elif step == 'time_minute':
+        text = f"📅 **{context.user_data.get('selected_date', '')}** ⏰ **{context.user_data.get('temp_hour', '')}:XX**\n\n{txt['select_minute']}"
+        keyboard.append([
+            InlineKeyboardButton("00", callback_data="min_00"),
+            InlineKeyboardButton("15", callback_data="min_15"),
+            InlineKeyboardButton("30", callback_data="min_30"),
+            InlineKeyboardButton("45", callback_data="min_45")
+        ])
+        keyboard.append([InlineKeyboardButton(txt['btn_custom_time'], callback_data="custom_datetime")])
+        keyboard.append(get_nav_buttons(lang))
+
+    elif step == 'passengers':
+        text = txt['select_passengers']
+        opts = txt['passengers_opts']
+        keyboard.append([
+            InlineKeyboardButton(opts[0], callback_data=opts[0]),
+            InlineKeyboardButton(opts[1], callback_data=opts[1]),
+            InlineKeyboardButton(opts[2], callback_data=opts[2]),
+            InlineKeyboardButton(opts[3], callback_data=opts[3])
+        ])
+        keyboard.append([InlineKeyboardButton(opts[4], callback_data="custom_passengers")])
+        keyboard.append(get_nav_buttons(lang))
+
+    elif step == 'children':
+        text = txt['ask_children']
+        keyboard.append([InlineKeyboardButton(txt['btn_yes_children'], callback_data="has_children"),
+                         InlineKeyboardButton(txt['btn_no_children'], callback_data="no_children")])
+        keyboard.append(get_nav_buttons(lang))
+
+    elif step == 'luggage':
+        text = txt['select_luggage']
+        opts = txt['luggage_opts']
+        keyboard.append([
+            InlineKeyboardButton(opts[0], callback_data=opts[0]),
+            InlineKeyboardButton(opts[1], callback_data=opts[1]),
+            InlineKeyboardButton(opts[2], callback_data=opts[2]),
+            InlineKeyboardButton(opts[3], callback_data=opts[3])
+        ])
+        keyboard.append([InlineKeyboardButton(opts[4], callback_data="custom_luggage")])
+        keyboard.append(get_nav_buttons(lang))
+
+    elif step == 'details':
+        text = txt['enter_details']
+        keyboard.append([InlineKeyboardButton(txt['btn_skip_details'], callback_data="skip_details")])
+        keyboard.append(get_nav_buttons(lang))
+
+    elif step == 'phone':
+        text = txt['share_phone']
+        keyboard.append(get_nav_buttons(lang))
+        markup = InlineKeyboardMarkup(keyboard)
+        try:
+            await context.bot.edit_message_text(chat_id=chat_id, message_id=card_msg_id, text=text, reply_markup=markup, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error editing phone step card: {e}")
+
+        reply_markup = ReplyKeyboardMarkup(
+            [[KeyboardButton(txt['btn_phone'], request_contact=True)]],
+            resize_keyboard=True,
+            one_time_keyboard=True
+        )
+        msg = await context.bot.send_message(chat_id=chat_id, text=txt['share_phone'], reply_markup=reply_markup)
+        context.user_data['phone_msg_id'] = msg.message_id
+        return
+
+    markup = InlineKeyboardMarkup(keyboard)
+    try:
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=card_msg_id,
+            text=text,
+            reply_markup=markup,
+            parse_mode='Markdown'
+        )
+    except Exception as e:
+        logger.error(f"Render step error: {e}")
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
+    chat_id = update.effective_chat.id
     lang = context.user_data.get('lang', 'ua')
-    
+
     if data == "nav_restart":
         await start_command(update, context)
         return
@@ -299,10 +413,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lang = data.split("_")[1]
         context.user_data['lang'] = lang
         context.user_data['step'] = 'transfer_type'
-        await render_step(query, context)
+        await render_step(chat_id, context)
         return
 
-    # Календарные события
     if data.startswith("cbcal_"):
         cal_lang = CALENDAR_LANGS.get(lang, 'en')
         result, key, step_type = DetailedTelegramCalendar(calendar_id=1, locale=cal_lang).process(data)
@@ -317,7 +430,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif result:
             context.user_data['selected_date'] = result.strftime("%d.%m.%Y")
             context.user_data['step'] = 'time_hour'
-            await render_step(query, context)
+            await render_step(chat_id, context)
             return
 
     if data == "nav_back":
@@ -338,7 +451,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await start_command(update, context)
                 return
-        await render_step(query, context)
+        await render_step(chat_id, context)
         return
 
     step = context.user_data.get('step')
@@ -446,126 +559,20 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.error(f"Error sending cancellation to admin: {e}")
         return
 
-    await render_step(query, context)
-
-async def render_step(query_or_dummy, context: ContextTypes.DEFAULT_TYPE):
-    lang = context.user_data.get('lang', 'ua')
-    txt = LANGUAGES[lang]
-    step = context.user_data.get('step', 'transfer_type')
-    
-    keyboard = []
-    
-    if step == 'transfer_type':
-        text = txt['select_type']
-        for t in txt['types']:
-            keyboard.append([InlineKeyboardButton(t, callback_data=t)])
-        keyboard.append(get_nav_buttons(lang, show_back=False))
-
-    elif step == 'pickup':
-        text = txt['enter_pickup']
-        keyboard.append(get_nav_buttons(lang))
-
-    elif step == 'dropoff':
-        text = txt['enter_dropoff']
-        keyboard.append(get_nav_buttons(lang))
-        
-    elif step == 'datetime':
-        cal_lang = CALENDAR_LANGS.get(lang, 'en')
-        calendar, step_type = DetailedTelegramCalendar(calendar_id=1, locale=cal_lang).build()
-        text = txt['select_date']
-        calendar_kbd = calendar.inline_keyboard
-        keyboard = calendar_kbd + [[InlineKeyboardButton(txt['btn_custom_time'], callback_data="custom_datetime")]] + [get_nav_buttons(lang)]
-
-    elif step == 'time_hour':
-        text = f"📅 **{context.user_data.get('selected_date', '')}**\n\n{txt['select_hour']}"
-        for h_row in [range(0, 6), range(6, 12), range(12, 18), range(18, 24)]:
-            keyboard.append([InlineKeyboardButton(f"{h:02d}", callback_data=f"hour_{h:02d}") for h in h_row])
-        keyboard.append([InlineKeyboardButton(txt['btn_custom_time'], callback_data="custom_datetime")])
-        keyboard.append(get_nav_buttons(lang))
-
-    elif step == 'time_minute':
-        text = f"📅 **{context.user_data.get('selected_date', '')}** ⏰ **{context.user_data.get('temp_hour', '')}:XX**\n\n{txt['select_minute']}"
-        keyboard.append([
-            InlineKeyboardButton("00", callback_data="min_00"),
-            InlineKeyboardButton("15", callback_data="min_15"),
-            InlineKeyboardButton("30", callback_data="min_30"),
-            InlineKeyboardButton("45", callback_data="min_45")
-        ])
-        keyboard.append([InlineKeyboardButton(txt['btn_custom_time'], callback_data="custom_datetime")])
-        keyboard.append(get_nav_buttons(lang))
-        
-    elif step == 'passengers':
-        text = txt['select_passengers']
-        opts = txt['passengers_opts']
-        keyboard.append([
-            InlineKeyboardButton(opts[0], callback_data=opts[0]),
-            InlineKeyboardButton(opts[1], callback_data=opts[1]),
-            InlineKeyboardButton(opts[2], callback_data=opts[2]),
-            InlineKeyboardButton(opts[3], callback_data=opts[3])
-        ])
-        keyboard.append([InlineKeyboardButton(opts[4], callback_data="custom_passengers")])
-        keyboard.append(get_nav_buttons(lang))
-
-    elif step == 'children':
-        text = txt['ask_children']
-        keyboard.append([InlineKeyboardButton(txt['btn_yes_children'], callback_data="has_children"),
-                         InlineKeyboardButton(txt['btn_no_children'], callback_data="no_children")])
-        keyboard.append(get_nav_buttons(lang))
-
-    elif step == 'luggage':
-        text = txt['select_luggage']
-        opts = txt['luggage_opts']
-        keyboard.append([
-            InlineKeyboardButton(opts[0], callback_data=opts[0]),
-            InlineKeyboardButton(opts[1], callback_data=opts[1]),
-            InlineKeyboardButton(opts[2], callback_data=opts[2]),
-            InlineKeyboardButton(opts[3], callback_data=opts[3])
-        ])
-        keyboard.append([InlineKeyboardButton(opts[4], callback_data="custom_luggage")])
-        keyboard.append(get_nav_buttons(lang))
-
-    elif step == 'details':
-        text = txt['enter_details']
-        keyboard.append([InlineKeyboardButton(txt['btn_skip_details'], callback_data="skip_details")])
-        keyboard.append(get_nav_buttons(lang))
-
-    elif step == 'phone':
-        text = txt['share_phone']
-        keyboard.append(get_nav_buttons(lang))
-        markup = InlineKeyboardMarkup(keyboard)
-        await query_or_dummy.edit_message_text(text=text, reply_markup=markup)
-        
-        reply_markup = ReplyKeyboardMarkup(
-            [[KeyboardButton(txt['btn_phone'], request_contact=True)]],
-            resize_keyboard=True,
-            one_time_keyboard=True
-        )
-        chat_id = context.user_data.get('chat_id', query_or_dummy.message.chat_id if hasattr(query_or_dummy, 'message') else query_or_dummy.chat_id)
-        
-        msg = await context.bot.send_message(
-            chat_id=chat_id,
-            text=txt['share_phone'],
-            reply_markup=reply_markup
-        )
-        context.user_data['phone_msg_id'] = msg.message_id
-        return
-
-    markup = InlineKeyboardMarkup(keyboard)
-    await query_or_dummy.edit_message_text(text=text, reply_markup=markup, parse_mode='Markdown')
+    await render_step(chat_id, context)
 
 async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await safe_delete_user_msg(context, update.effective_chat.id, update.message.message_id)
+    chat_id = update.effective_chat.id
+    await safe_delete_user_msg(context, chat_id, update.message.message_id)
     
     card_msg_id = context.user_data.get('card_msg_id')
     user_text = update.message.text
-    context.user_data['chat_id'] = update.effective_chat.id
     
     if not card_msg_id:
         return
         
     step = context.user_data.get('step')
     
-    # Прямая маршрутизация на основе текущего шага без лишних флагов
     if step == 'pickup':
         context.user_data['pickup'] = user_text
         context.user_data['step'] = 'dropoff'
@@ -590,27 +597,15 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         return
 
-    class DummyQuery:
-        def __init__(self, chat_id, msg_id):
-            self.chat_id = chat_id
-            self.message_id = msg_id
-        async def edit_message_text(self, text, reply_markup=None, parse_mode=None):
-            await context.bot.edit_message_text(
-                chat_id=self.chat_id,
-                message_id=self.message_id,
-                text=text,
-                reply_markup=reply_markup,
-                parse_mode=parse_mode
-            )
-            
-    dummy = DummyQuery(update.effective_chat.id, card_msg_id)
-    await render_step(dummy, context)
+    # Вызов перерисовки карточки после ввода текста
+    await render_step(chat_id, context)
 
 async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await safe_delete_user_msg(context, update.effective_chat.id, update.message.message_id)
+    chat_id = update.effective_chat.id
+    await safe_delete_user_msg(context, chat_id, update.message.message_id)
     
     if 'phone_msg_id' in context.user_data:
-        await safe_delete_user_msg(context, update.effective_chat.id, context.user_data['phone_msg_id'])
+        await safe_delete_user_msg(context, chat_id, context.user_data['phone_msg_id'])
     
     contact = update.message.contact
     phone = contact.phone_number if contact else update.message.text
@@ -644,13 +639,12 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton(txt['btn_cancel_order'], callback_data="ask_cancel")]
     ]
     markup = InlineKeyboardMarkup(keyboard)
-    
     summary_text = build_summary_text(context.user_data, lang)
 
     if card_msg_id:
         try:
             await context.bot.edit_message_text(
-                chat_id=update.effective_chat.id,
+                chat_id=chat_id,
                 message_id=card_msg_id,
                 text=summary_text,
                 reply_markup=markup,
@@ -659,11 +653,14 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             logger.error(f"Error updating card message: {e}")
 
-    await context.bot.send_message(
-        chat_id=update.effective_chat.id,
+    # Удаляем физическую кнопку отправки контакта
+    remove_keyboard_msg = await context.bot.send_message(
+        chat_id=chat_id,
         text=txt['success'],
         reply_markup=ReplyKeyboardRemove()
     )
+    # Удаляем техническое сообщение об удалении клавиатуры
+    await safe_delete_user_msg(context, chat_id, remove_keyboard_msg.message_id)
 
 @app.route('/')
 def index():
