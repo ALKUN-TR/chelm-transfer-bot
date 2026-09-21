@@ -1,6 +1,7 @@
 import os
 import logging
 import threading
+import asyncio
 from flask import Flask
 from telegram import (
     Update, 
@@ -43,7 +44,6 @@ def escape_markdown(text) -> str:
     if text is None or text == "":
         return "-"
     text_str = str(text)
-    # Исправлено безопасное экранирование Markdown V1
     for char in ['_', '*', '`', '[', ']', '(', ')']:
         text_str = text_str.replace(char, f'\\{char}')
     return text_str
@@ -260,8 +260,8 @@ def build_summary_text(context_data, lang_code):
 async def safe_delete_user_msg(context, chat_id, message_id):
     try:
         await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Failed to delete message {message_id}: {e}")
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
@@ -563,16 +563,18 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    await safe_delete_user_msg(context, chat_id, update.message.message_id)
-    
-    card_msg_id = context.user_data.get('card_msg_id')
+    user_msg_id = update.message.message_id
     user_text = update.message.text
     
-    if not card_msg_id:
+    card_msg_id = context.user_data.get('card_msg_id')
+    step = context.user_data.get('step')
+
+    # Фоновое асинхронное удаление входящего сообщения
+    asyncio.create_task(safe_delete_user_msg(context, chat_id, user_msg_id))
+    
+    if not card_msg_id or not step:
         return
         
-    step = context.user_data.get('step')
-    
     if step == 'pickup':
         context.user_data['pickup'] = user_text
         context.user_data['step'] = 'dropoff'
@@ -597,15 +599,14 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         return
 
-    # Вызов перерисовки карточки после ввода текста
     await render_step(chat_id, context)
 
 async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    await safe_delete_user_msg(context, chat_id, update.message.message_id)
+    asyncio.create_task(safe_delete_user_msg(context, chat_id, update.message.message_id))
     
     if 'phone_msg_id' in context.user_data:
-        await safe_delete_user_msg(context, chat_id, context.user_data['phone_msg_id'])
+        asyncio.create_task(safe_delete_user_msg(context, chat_id, context.user_data['phone_msg_id']))
     
     contact = update.message.contact
     phone = contact.phone_number if contact else update.message.text
@@ -653,14 +654,12 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             logger.error(f"Error updating card message: {e}")
 
-    # Удаляем физическую кнопку отправки контакта
     remove_keyboard_msg = await context.bot.send_message(
         chat_id=chat_id,
         text=txt['success'],
         reply_markup=ReplyKeyboardRemove()
     )
-    # Удаляем техническое сообщение об удалении клавиатуры
-    await safe_delete_user_msg(context, chat_id, remove_keyboard_msg.message_id)
+    asyncio.create_task(safe_delete_user_msg(context, chat_id, remove_keyboard_msg.message_id))
 
 @app.route('/')
 def index():
