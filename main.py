@@ -323,8 +323,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "nav_back":
         step = context.user_data.get('step')
         steps_order = ['transfer_type', 'pickup', 'dropoff', 'datetime', 'passengers', 'children', 'luggage', 'details', 'phone']
-        if step in ['time_hour', 'time_minute']:
+        if step in ['time_hour', 'time_minute', 'custom_datetime']:
             context.user_data['step'] = 'datetime'
+        elif step in ['custom_passengers']:
+            context.user_data['step'] = 'passengers'
+        elif step in ['custom_children']:
+            context.user_data['step'] = 'children'
+        elif step in ['custom_luggage']:
+            context.user_data['step'] = 'luggage'
         elif step in steps_order:
             idx = steps_order.index(step)
             if idx > 0:
@@ -340,9 +346,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if step == 'transfer_type':
         context.user_data['transfer_type'] = data
         context.user_data['step'] = 'pickup'
-        context.user_data['awaiting_text'] = 'pickup'
     elif step == 'datetime' and data == "custom_datetime":
-        context.user_data['awaiting_text'] = 'datetime'
+        context.user_data['step'] = 'custom_datetime'
         txt = LANGUAGES[lang]
         markup = InlineKeyboardMarkup([get_nav_buttons(lang)])
         await query.edit_message_text(txt['enter_datetime_custom'], reply_markup=markup)
@@ -352,15 +357,27 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             hour = data.split("_")[1]
             context.user_data['temp_hour'] = hour
             context.user_data['step'] = 'time_minute'
+        elif data == "custom_datetime":
+            context.user_data['step'] = 'custom_datetime'
+            txt = LANGUAGES[lang]
+            markup = InlineKeyboardMarkup([get_nav_buttons(lang)])
+            await query.edit_message_text(txt['enter_datetime_custom'], reply_markup=markup)
+            return
     elif step == 'time_minute':
         if data.startswith("min_"):
             minute = data.split("_")[1]
             full_dt = f"{context.user_data['selected_date']} {context.user_data['temp_hour']}:{minute}"
             context.user_data['datetime'] = full_dt
             context.user_data['step'] = 'passengers'
+        elif data == "custom_datetime":
+            context.user_data['step'] = 'custom_datetime'
+            txt = LANGUAGES[lang]
+            markup = InlineKeyboardMarkup([get_nav_buttons(lang)])
+            await query.edit_message_text(txt['enter_datetime_custom'], reply_markup=markup)
+            return
     elif step == 'passengers':
         if data == "custom_passengers":
-            context.user_data['awaiting_text'] = 'passengers'
+            context.user_data['step'] = 'custom_passengers'
             txt = LANGUAGES[lang]
             markup = InlineKeyboardMarkup([get_nav_buttons(lang)])
             await query.edit_message_text(txt['enter_passengers_custom'], reply_markup=markup)
@@ -369,7 +386,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['step'] = 'children'
     elif step == 'children':
         if data == "has_children":
-            context.user_data['awaiting_text'] = 'children'
+            context.user_data['step'] = 'custom_children'
             txt = LANGUAGES[lang]
             markup = InlineKeyboardMarkup([get_nav_buttons(lang)])
             await query.edit_message_text(txt['enter_children_info'], reply_markup=markup)
@@ -379,14 +396,13 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data['step'] = 'luggage'
     elif step == 'luggage':
         if data == "custom_luggage":
-            context.user_data['awaiting_text'] = 'luggage'
+            context.user_data['step'] = 'custom_luggage'
             txt = LANGUAGES[lang]
             markup = InlineKeyboardMarkup([get_nav_buttons(lang)])
             await query.edit_message_text(txt['enter_luggage_custom'], reply_markup=markup)
             return
         context.user_data['luggage'] = data
         context.user_data['step'] = 'details'
-        context.user_data['awaiting_text'] = 'details'
     elif step == 'details':
         if data == "skip_details":
             context.user_data['details'] = "-"
@@ -461,14 +477,14 @@ async def render_step(query_or_dummy, context: ContextTypes.DEFAULT_TYPE):
         keyboard = calendar_kbd + [[InlineKeyboardButton(txt['btn_custom_time'], callback_data="custom_datetime")]] + [get_nav_buttons(lang)]
 
     elif step == 'time_hour':
-        text = f"📅 **{context.user_data['selected_date']}**\n\n{txt['select_hour']}"
+        text = f"📅 **{context.user_data.get('selected_date', '')}**\n\n{txt['select_hour']}"
         for h_row in [range(0, 6), range(6, 12), range(12, 18), range(18, 24)]:
             keyboard.append([InlineKeyboardButton(f"{h:02d}", callback_data=f"hour_{h:02d}") for h in h_row])
         keyboard.append([InlineKeyboardButton(txt['btn_custom_time'], callback_data="custom_datetime")])
         keyboard.append(get_nav_buttons(lang))
 
     elif step == 'time_minute':
-        text = f"📅 **{context.user_data['selected_date']}** ⏰ **{context.user_data['temp_hour']}:XX**\n\n{txt['select_minute']}"
+        text = f"📅 **{context.user_data.get('selected_date', '')}** ⏰ **{context.user_data.get('temp_hour', '')}:XX**\n\n{txt['select_minute']}"
         keyboard.append([
             InlineKeyboardButton("00", callback_data="min_00"),
             InlineKeyboardButton("15", callback_data="min_15"),
@@ -540,41 +556,40 @@ async def render_step(query_or_dummy, context: ContextTypes.DEFAULT_TYPE):
 async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await safe_delete_user_msg(context, update.effective_chat.id, update.message.message_id)
     
-    awaiting = context.user_data.get('awaiting_text')
     card_msg_id = context.user_data.get('card_msg_id')
     user_text = update.message.text
     context.user_data['chat_id'] = update.effective_chat.id
     
-    if not awaiting or not card_msg_id:
+    if not card_msg_id:
         return
         
-    # Сбрасываем флаг сразу при получении
-    context.user_data['awaiting_text'] = None
-        
-    if awaiting == 'pickup':
+    step = context.user_data.get('step')
+    
+    # Прямая маршрутизация на основе текущего шага без лишних флагов
+    if step == 'pickup':
         context.user_data['pickup'] = user_text
         context.user_data['step'] = 'dropoff'
-        context.user_data['awaiting_text'] = 'dropoff'
-    elif awaiting == 'dropoff':
+    elif step == 'dropoff':
         context.user_data['dropoff'] = user_text
         context.user_data['step'] = 'datetime'
-    elif awaiting == 'datetime':
+    elif step == 'custom_datetime':
         context.user_data['datetime'] = user_text
         context.user_data['step'] = 'passengers'
-    elif awaiting == 'passengers':
+    elif step == 'custom_passengers':
         context.user_data['passengers'] = user_text
         context.user_data['step'] = 'children'
-    elif awaiting == 'children':
+    elif step == 'custom_children':
         context.user_data['children'] = user_text
         context.user_data['step'] = 'luggage'
-    elif awaiting == 'luggage':
+    elif step == 'custom_luggage':
         context.user_data['luggage'] = user_text
         context.user_data['step'] = 'details'
-        context.user_data['awaiting_text'] = 'details'
-    elif awaiting == 'details':
+    elif step == 'details':
         context.user_data['details'] = user_text
         context.user_data['step'] = 'phone'
-        
+    else:
+        return
+
     class DummyQuery:
         def __init__(self, chat_id, msg_id):
             self.chat_id = chat_id
